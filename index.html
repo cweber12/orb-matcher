@@ -59,11 +59,15 @@
 
   <script>
     window.Module = {
+      locateFile: (f) => `./opencv/${f}`,
       onRuntimeInitialized() {
         console.log('OpenCV.js ready');
-        window.cvIsReady = true;
+        window.cvIsReady = true;            // <<— add this line
         document.dispatchEvent(new Event('cv-ready'));
-      }
+      },
+      print: (txt) => console.log('[opencv]', txt),
+      printErr: (txt) => console.error('[opencv-err]', txt),
+      onAbort: (txt) => console.error('[opencv-abort]', txt),
     };
   </script>
   <script src="./opencv/opencv.js"></script>
@@ -91,6 +95,54 @@
 
     const haveFeatures = () => Boolean(loadedJSON || detectResult);
 
+    // ---- helpers ----
+    const __tmpCanvas = document.createElement('canvas');
+    const __tmpCtx = __tmpCanvas.getContext('2d', { willReadFrequently: true });
+
+    function matFromImageEl(imgEl) {
+      const w = imgEl.naturalWidth || imgEl.width;
+      const h = imgEl.naturalHeight || imgEl.height;
+
+      // Draw the <img> to an offscreen canvas and grab RGBA bytes
+      __tmpCanvas.width = w;
+      __tmpCanvas.height = h;
+      __tmpCtx.clearRect(0, 0, w, h);
+      __tmpCtx.drawImage(imgEl, 0, 0, w, h);
+      const imageData = __tmpCtx.getImageData(0, 0, w, h);
+
+      // Allocate CV_8UC4 without using 'new cv.Mat(...)'
+      const mat = window.cv.Mat.zeros(h, w, window.cv.CV_8UC4);
+      mat.data.set(imageData.data);   // copy RGBA buffer in
+      return mat;
+    }
+
+    function imshowCompat(canvas, mat) {
+      if (window.cv.imshow) { // if your build has it, use it
+        window.cv.imshow(canvas, mat);
+        return;
+      }
+      // Ensure RGBA, then paint with putImageData
+      let rgba = mat;
+      if (mat.type() === window.cv.CV_8UC3) {
+        rgba = new window.cv.Mat();
+        window.cv.cvtColor(mat, rgba, window.cv.COLOR_RGB2RGBA);
+      } else if (mat.type() !== window.cv.CV_8UC4) {
+        const tmp = new window.cv.Mat();
+        window.cv.cvtColor(mat, tmp, window.cv.COLOR_RGBA2RGBA);
+        rgba = tmp;
+      } else {
+        rgba = mat.clone();
+      }
+      const imageData = new ImageData(
+        new Uint8ClampedArray(rgba.data),
+        rgba.cols, rgba.rows
+      );
+      canvas.width = rgba.cols;
+      canvas.height = rgba.rows;
+      canvas.getContext('2d').putImageData(imageData, 0, 0);
+      rgba.delete();
+    }
+    
     function refreshButtons() {
       console.log('refreshButtons', { cvReady, imgAReady, imgBReady, haveFeatures: haveFeatures(), detectResult });
       btnDetect.disabled = !(cvReady && imgAReady);
@@ -112,6 +164,7 @@
         mod = new ORBModule(window.cv);
         cvReady = true;
         console.log('onCvReady → cvReady=true');
+        console.log('cv.imread:', typeof window.cv.imread);
       } catch (e) {
         console.error('cv init error', e);
         cvReady = false;
@@ -119,9 +172,12 @@
       refreshButtons();
     }
 
-    // Race-safe cv init
-    if ((window.cv && window.cv.Mat) || window.cvIsReady) onCvReady();
-    else document.addEventListener('cv-ready', onCvReady);
+    // init: catch both the event *and* the already-ready case
+    if (window.cvIsReady || (window.cv && (window.cv.Mat || window.cv.getBuildInformation))) {
+      onCvReady();
+    } else {
+      document.addEventListener('cv-ready', onCvReady, { once: true });
+    }
 
     // ---- events ----
     fileA.addEventListener('change', async () => {
@@ -171,7 +227,8 @@
     btnDetect.addEventListener('click', () => {
       if (!cvReady || !imgAReady) return;
       const cv = window.cv;
-      const src = cv.imread(imgA);
+      // const src = cv.imread(imgA);
+      const src = matFromImageEl(imgA); 
       const opts = { nfeatures: Number(nfeatures.value) || 1200 };
       try {
         detectResult = mod.detectORB(src, opts);
@@ -208,7 +265,8 @@
       if (!cvReady || !imgBReady) return;
       if (!loadedJSON && !detectResult) { alert('Load features.json or run Detect on Image A first.'); return; }
       const cv = window.cv;
-      const target = cv.imread(imgB);
+      // const target = cv.imread(imgB);
+      const target = matFromImageEl(imgB); // short term fix for imread issues
       const source = loadedJSON || mod.exportJSON(detectResult);
       try {
         const res = mod.matchToTarget(source, target, {
@@ -221,9 +279,11 @@
           `matches: ${res.matches.length}\n` +
           `inliers: ${res.numInliers ?? 0}\n` +
           (res.homography ? `H: [${res.homography.map(v => v.toFixed(3)).join(', ')}]` : 'H: (none)');
-        const A = cv.imread(imgA);
+        // const A = cv.imread(imgA);
+        const A = matFromImageEl(imgA); // short term fix for imread issues
         mod.drawMatches(A, target, source.keypoints, res);
-        cv.imshow(canvasMatches, mod._lastCanvasMat);
+        // cv.imshow(canvasMatches, mod._lastCanvasMat);
+        imshowCompat(canvasMatches, mod._lastCanvasMat); // custom imshow
         canvasMatches.hidden = false;
         A.delete();
         mod._releaseLastCanvasMat();
