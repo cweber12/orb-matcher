@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ORB Feature Tool (Detect → Save JSON → Match)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { font-family: ui-sans-serif, system-ui, Arial; }
+    body { margin: 24px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+    h2 { margin: 0 0 8px; font-size: 18px; }
+    button { padding: 8px 12px; border-radius: 8px; border: 1px solid #d1d5db; background: #111827; color: white; cursor: pointer; }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+    .muted { color:#6b7280; font-size: 12px; }
+    canvas, img { max-width: 100%; border-radius: 8px; border: 1px solid #e5e7eb; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>ORB Feature Tool</h1>
+  <p class="muted">Detect features on Image A → download <code>features.json</code> → load Image B + JSON → match & visualize.</p>
+
+  <div class="grid">
+    <!-- Left: Detect & Export -->
+    <div class="card">
+      <h2>1) Detect features (Image A)</h2>
+      <div class="row">
+        <input id="fileA" type="file" accept="image/*" />
+        <button id="btnDetect" disabled>Detect ORB</button>
+        <button id="btnDownload" disabled>Download features.json</button>
+      </div>
+      <div class="row muted">
+        nfeatures <input id="nfeatures" type="number" value="1200" min="100" max="5000" style="width:90px">
+        ratio <input id="ratio" type="number" step="0.01" value="0.75" style="width:80px">
+        RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:90px">
+      </div>
+      <img id="imgA" alt="Image A preview" />
+      <canvas id="canvasA" hidden></canvas>
+      <div id="statsA" class="mono muted"></div>
+    </div>
+
+    <!-- Right: Import JSON + match to Image B -->
+    <div class="card">
+      <h2>2) Load features.json + match to Image B</h2>
+      <div class="row">
+        <input id="fileJSON" type="file" accept=".json,application/json" />
+        <input id="fileB" type="file" accept="image/*" />
+      </div>
+      <div class="row">
+        <button id="btnMatch" disabled>Match</button>
+      </div>
+      <img id="imgB" alt="Image B preview" />
+      <canvas id="canvasMatches" hidden></canvas>
+      <div id="statsB" class="mono muted"></div>
+    </div>
+  </div>
+
+  <script>
+    window.Module = {
+      onRuntimeInitialized() {
+        console.log('OpenCV.js ready');
+        document.dispatchEvent(new Event('cv-ready'));
+      }
+    };
+  </script>
+  <script src="/opencv/opencv.js"></script>
+
+  <script type="module">
+    import { ORBModule } from './orb_module.js';
+
+    const el = (id) => document.getElementById(id);
+    const fileA = el('fileA'), imgA = el('imgA'), canvasA = el('canvasA');
+    const fileJSON = el('fileJSON'), fileB = el('fileB'), imgB = el('imgB');
+    const btnDetect = el('btnDetect'), btnDownload = el('btnDownload'), btnMatch = el('btnMatch');
+    const statsA = el('statsA'), statsB = el('statsB');
+    const nfeatures = el('nfeatures'), ratio = el('ratio'), ransac = el('ransac');
+
+    let mod; // ORBModule instance
+    let detectResult = null; // { keypoints, descriptors, width, height }
+    let loadedJSON = null;   // parsed json from disk
+
+    // Gate everything until cv is ready
+    document.addEventListener('cv-ready', () => {
+      mod = new ORBModule(window.cv);
+      btnDetect.disabled = false;
+    });
+
+    // File preview helpers
+    function loadImg(file, imgEl) {
+      return new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => { imgEl.src = reader.result; imgEl.onload = () => res(); };
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    fileA.addEventListener('change', async () => {
+      const f = fileA.files?.[0]; if (!f) return;
+      await loadImg(f, imgA);
+      btnDownload.disabled = true;
+      detectResult = null;
+      statsA.textContent = '';
+    });
+
+    fileB.addEventListener('change', async () => {
+      const f = fileB.files?.[0]; if (!f) return;
+      await loadImg(f, imgB);
+      btnMatch.disabled = !(loadedJSON && imgB.src);
+      statsB.textContent = '';
+    });
+
+    fileJSON.addEventListener('change', async () => {
+      const f = fileJSON.files?.[0]; if (!f) return;
+      loadedJSON = JSON.parse(await f.text());
+      btnMatch.disabled = !(loadedJSON && imgB.src);
+    });
+
+    // DETECT on Image A
+    btnDetect.addEventListener('click', async () => {
+      if (!imgA.src) { alert('Upload Image A first'); return; }
+      const opts = { nfeatures: Number(nfeatures.value) || 1200 };
+      const matchOpts = {
+        ratio: Number(ratio.value) || 0.75,
+        ransacReprojThreshold: Number(ransac.value) || 3.0
+      };
+
+      // read into Mat (RGBA)
+      const src = window.cv.imread(imgA);
+      try {
+        detectResult = mod.detectORB(src, opts);
+        statsA.textContent =
+          `A: ${detectResult.width}x${detectResult.height}\n` +
+          `keypoints: ${detectResult.keypoints.length}\n` +
+          `descriptors: ${detectResult.descriptors?.rows ?? 0} x ${detectResult.descriptors?.cols ?? 0}`;
+        btnDownload.disabled = !detectResult.descriptors;
+
+        // draw keypoints overlay (for fun)
+        canvasA.hidden = false;
+        mod.drawKeypoints(src, detectResult.keypoints, canvasA);
+      } finally {
+        src.delete();
+      }
+    });
+
+    // DOWNLOAD features.json
+    btnDownload.addEventListener('click', () => {
+      if (!detectResult) return;
+      const json = mod.exportJSON(detectResult);
+      const blob = new Blob([JSON.stringify(json)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'features.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    // MATCH: features.json (or in-memory detectResult) vs Image B
+    btnMatch.addEventListener('click', async () => {
+      if (!imgB.src) { alert('Upload Image B'); return; }
+      if (!loadedJSON && !detectResult) { alert('Load features.json (or detect on A first)'); return; }
+
+      // Prefer loaded JSON; fall back to in-memory detect
+      const source = loadedJSON || mod.exportJSON(detectResult);
+      const target = window.cv.imread(imgB);
+
+      try {
+        const matchOpts = {
+          ratio: Number(ratio.value) || 0.75,
+          ransacReprojThreshold: Number(ransac.value) || 3.0,
+          useKnn: true
+        };
+        const res = mod.matchToTarget(source, target, matchOpts);
+
+        statsB.textContent =
+          `B: ${target.cols}x${target.rows}\n` +
+          `matches: ${res.matches.length}\n` +
+          `inliers: ${res.numInliers ?? 0}\n` +
+          (res.homography ? `H: [${res.homography.map(v => v.toFixed(3)).join(', ')}]` : 'H: (none)');
+
+        // visualize
+        canvasMatches.hidden = false;
+        // Recreate a Mat from source preview to draw side-by-side matches
+        const A = window.cv.imread(imgA);
+        mod.drawMatches(A, target, source.keypoints, res);
+        window.cv.imshow(canvasMatches, mod._lastCanvasMat); // internal output mat
+        A.delete();
+        mod._releaseLastCanvasMat();
+        target.delete();
+      } catch (e) {
+        target.delete();
+        console.error(e);
+        alert('Match failed. See console.');
+      }
+    });
+  </script>
+</body>
+</html>
