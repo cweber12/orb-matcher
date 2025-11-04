@@ -70,86 +70,132 @@
   <script type="module">
     import { ORBModule } from './orb_module.js';
 
+    // ---- elements ----
     const el = (id) => document.getElementById(id);
     const fileA = el('fileA'), imgA = el('imgA'), canvasA = el('canvasA');
     const fileJSON = el('fileJSON'), fileB = el('fileB'), imgB = el('imgB');
     const btnDetect = el('btnDetect'), btnDownload = el('btnDownload'), btnMatch = el('btnMatch');
     const statsA = el('statsA'), statsB = el('statsB');
     const nfeatures = el('nfeatures'), ratio = el('ratio'), ransac = el('ransac');
+    const canvasMatches = el('canvasMatches');
 
-    let mod; // ORBModule instance
-    let detectResult = null; // { keypoints, descriptors, width, height }
-    let loadedJSON = null;   // parsed json from disk
+    // ---- state ----
+    let mod;                    // ORBModule instance
+    let cvReady = false;
+    let imgAReady = false;
+    let imgBReady = false;
+    let detectResult = null;    // { keypoints, descriptors, width, height }
+    let loadedJSON = null;      // parsed json from disk
 
-    // Gate everything until cv is ready
-    document.addEventListener('cv-ready', () => {
-      mod = new ORBModule(window.cv);
-      btnDetect.disabled = false;
-    });
+    // ---- helpers ----
+    const haveFeatures = () => Boolean(loadedJSON || detectResult);
 
-    // File preview helpers
+    function refreshButtons() {
+      btnDetect.disabled = !(cvReady && imgAReady);
+      btnDownload.disabled = !(detectResult && detectResult.descriptors);
+      btnMatch.disabled = !(cvReady && imgBReady && haveFeatures());
+    }
+
     function loadImg(file, imgEl) {
       return new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = () => { imgEl.src = reader.result; imgEl.onload = () => res(); };
-        reader.onerror = rej;
-        reader.readAsDataURL(file);
+        const r = new FileReader();
+        r.onload = () => { imgEl.onload = () => res(); imgEl.onerror = rej; imgEl.src = r.result; };
+        r.onerror = rej;
+        r.readAsDataURL(file);
       });
     }
 
+    function onCvReady() {
+      try {
+        mod = new ORBModule(window.cv);
+        cvReady = true;
+      } catch (e) {
+        console.error('cv init error', e);
+        cvReady = false;
+      }
+      refreshButtons();
+    }
+
+    // Handle both cases: cv may already be ready or not yet.
+    if (window.cv && window.cv.Mat) onCvReady();
+    else document.addEventListener('cv-ready', onCvReady);
+
+    // ---- events ----
     fileA.addEventListener('change', async () => {
-      const f = fileA.files?.[0]; if (!f) return;
-      await loadImg(f, imgA);
-      btnDownload.disabled = true;
-      detectResult = null;
-      statsA.textContent = '';
+      const f = fileA.files?.[0];
+      if (!f) return;
+      try {
+        await loadImg(f, imgA);
+        imgAReady = true;
+        // reset previous outputs
+        detectResult = null;
+        statsA.textContent = '';
+        canvasA.hidden = true;
+      } catch (e) {
+        console.error('Image A preview error', e);
+        imgAReady = false;
+      }
+      refreshButtons();
     });
 
     fileB.addEventListener('change', async () => {
-      const f = fileB.files?.[0]; if (!f) return;
-      await loadImg(f, imgB);
-      btnMatch.disabled = !(loadedJSON && imgB.src);
-      statsB.textContent = '';
+      const f = fileB.files?.[0];
+      if (!f) return;
+      try {
+        await loadImg(f, imgB);
+        imgBReady = true;
+        statsB.textContent = '';
+        canvasMatches.hidden = true;
+      } catch (e) {
+        console.error('Image B preview error', e);
+        imgBReady = false;
+      }
+      refreshButtons();
     });
 
     fileJSON.addEventListener('change', async () => {
-      const f = fileJSON.files?.[0]; if (!f) return;
-      loadedJSON = JSON.parse(await f.text());
-      btnMatch.disabled = !(loadedJSON && imgB.src);
+      const f = fileJSON.files?.[0];
+      if (!f) return;
+      try {
+        loadedJSON = JSON.parse(await f.text());
+      } catch (e) {
+        console.error('JSON parse error', e);
+        loadedJSON = null;
+      }
+      refreshButtons();
     });
 
-    // DETECT on Image A
-    btnDetect.addEventListener('click', async () => {
-      if (!imgA.src) { alert('Upload Image A first'); return; }
+    // ---- DETECT on Image A ----
+    btnDetect.addEventListener('click', () => {
+      if (!cvReady || !imgAReady) return;
+      const cv = window.cv;
+      const src = cv.imread(imgA);
       const opts = { nfeatures: Number(nfeatures.value) || 1200 };
-      const matchOpts = {
-        ratio: Number(ratio.value) || 0.75,
-        ransacReprojThreshold: Number(ransac.value) || 3.0
-      };
 
-      // read into Mat (RGBA)
-      const src = window.cv.imread(imgA);
       try {
         detectResult = mod.detectORB(src, opts);
         statsA.textContent =
           `A: ${detectResult.width}x${detectResult.height}\n` +
           `keypoints: ${detectResult.keypoints.length}\n` +
           `descriptors: ${detectResult.descriptors?.rows ?? 0} x ${detectResult.descriptors?.cols ?? 0}`;
-        btnDownload.disabled = !detectResult.descriptors;
 
-        // draw keypoints overlay (for fun)
         canvasA.hidden = false;
         mod.drawKeypoints(src, detectResult.keypoints, canvasA);
+      } catch (e) {
+        console.error('Detect error', e);
+        alert('Detect failed. See console.');
+        detectResult = null;
       } finally {
         src.delete();
+        refreshButtons();
       }
     });
 
-    // DOWNLOAD features.json
+    // ---- DOWNLOAD features.json ----
     btnDownload.addEventListener('click', () => {
       if (!detectResult) return;
       const json = mod.exportJSON(detectResult);
-      const blob = new Blob([JSON.stringify(json)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'features.json';
@@ -157,20 +203,20 @@
       URL.revokeObjectURL(a.href);
     });
 
-    // MATCH: features.json (or in-memory detectResult) vs Image B
-    btnMatch.addEventListener('click', async () => {
-      if (!imgB.src) { alert('Upload Image B'); return; }
-      if (!loadedJSON && !detectResult) { alert('Load features.json (or detect on A first)'); return; }
+    // ---- MATCH: features.json (or in-memory detectResult) vs Image B ----
+    btnMatch.addEventListener('click', () => {
+      if (!cvReady || !imgBReady) return;
+      if (!loadedJSON && !detectResult) { alert('Load features.json or run Detect on Image A first.'); return; }
 
-      // Prefer loaded JSON; fall back to in-memory detect
+      const cv = window.cv;
+      const target = cv.imread(imgB);
       const source = loadedJSON || mod.exportJSON(detectResult);
-      const target = window.cv.imread(imgB);
 
       try {
         const matchOpts = {
+          useKnn: true,
           ratio: Number(ratio.value) || 0.75,
-          ransacReprojThreshold: Number(ransac.value) || 3.0,
-          useKnn: true
+          ransacReprojThreshold: Number(ransac.value) || 3.0
         };
         const res = mod.matchToTarget(source, target, matchOpts);
 
@@ -180,21 +226,22 @@
           `inliers: ${res.numInliers ?? 0}\n` +
           (res.homography ? `H: [${res.homography.map(v => v.toFixed(3)).join(', ')}]` : 'H: (none)');
 
-        // visualize
-        canvasMatches.hidden = false;
-        // Recreate a Mat from source preview to draw side-by-side matches
-        const A = window.cv.imread(imgA);
+        // visualize (A | B)
+        const A = cv.imread(imgA);
         mod.drawMatches(A, target, source.keypoints, res);
-        window.cv.imshow(canvasMatches, mod._lastCanvasMat); // internal output mat
+        cv.imshow(canvasMatches, mod._lastCanvasMat);
+        canvasMatches.hidden = false;
         A.delete();
         mod._releaseLastCanvasMat();
-        target.delete();
       } catch (e) {
-        target.delete();
-        console.error(e);
+        console.error('Match error', e);
         alert('Match failed. See console.');
+      } finally {
+        target.delete();
+        refreshButtons();
       }
     });
   </script>
+
 </body>
 </html>
