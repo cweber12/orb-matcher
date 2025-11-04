@@ -68,92 +68,87 @@ export class ORBModule {
   }
 
   // Match JSON features (Image A) against a target Mat (Image B)
-  matchToTarget(featuresJSON, targetRGBA, options = {}) {
+  matchToTarget(sourceJson, targetMat, opts = {}) {
     const cv = this.cv;
-    const src = this.importJSON(featuresJSON);
-    // Compute ORB on target
-    const detB = this.detectORB(targetRGBA, { nfeatures: 1200 });
-    // Rewrap descriptors
-    if (!src.descriptors || !detB.descriptors) return { matches: [] };
+    const ratio = opts.ratio ?? 0.75;
+    const ransacThresh = opts.ransacReprojThreshold ?? 3.0;
 
-    const A = cv.matFromArray(src.descriptors.rows, src.descriptors.cols, cv.CV_8U, Array.from(src.descriptors.data));
-    const B = cv.matFromArray(detB.descriptors.rows, detB.descriptors.cols, cv.CV_8U, Array.from(detB.descriptors.data));
-
-    const matcher = new cv.BFMatcher(cv.NORM_HAMMING, false);
-    const {
-      useKnn = true,
-      k = 2,
-      ratio = 0.75,
-      ransacReprojThreshold = 3.0,
-      refineWithHomography = true
-    } = options;
-
-    const result = { matches: [], homography: null, inlierMask: null, numInliers: 0 };
-
-    try {
-      if (useKnn) {
-        const knn = new cv.DMatchVectorVector();
-        matcher.knnMatch(A, B, knn, Math.max(1, k));
-        const good = [];
-        for (let i = 0; i < knn.size(); i++) {
-          const v = knn.get(i);
-          if (v.size() >= 2) {
-            const m0 = v.get(0), m1 = v.get(1);
-            if (m0.distance <= ratio * m1.distance) {
-              good.push({ queryIdx: m0.queryIdx, trainIdx: m0.trainIdx, distance: m0.distance });
-            }
-            m0.delete(); m1.delete();
-          } else if (v.size() === 1) {
-            const m0 = v.get(0);
-            good.push({ queryIdx: m0.queryIdx, trainIdx: m0.trainIdx, distance: m0.distance });
-            m0.delete();
-          }
-          v.delete();
-        }
-        knn.delete();
-        good.sort((a,b)=>a.distance-b.distance);
-        result.matches = good;
-      } else {
-        const mv = new cv.DMatchVector();
-        matcher.match(A,B,mv);
-        const arr = [];
-        for (let i=0;i<mv.size();i++){ const m=mv.get(i); arr.push({queryIdx:m.queryIdx,trainIdx:m.trainIdx,distance:m.distance}); m.delete(); }
-        mv.delete();
-        arr.sort((a,b)=>a.distance-b.distance);
-        result.matches = arr;
-      }
-
-      // RANSAC Homography refinement
-      if (refineWithHomography && result.matches.length >= 4) {
-        const pts1 = [], pts2 = [];
-        for (const m of result.matches) {
-          const p1 = src.keypoints[m.queryIdx];
-          const p2 = detB.keypoints[m.trainIdx];
-          if (p1 && p2) { pts1.push(p1.x, p1.y); pts2.push(p2.x, p2.y); }
-        }
-        if (pts1.length >= 8) {
-          const mat1 = cv.matFromArray(pts1.length/2, 1, cv.CV_32FC2, pts1);
-          const mat2 = cv.matFromArray(pts2.length/2, 1, cv.CV_32FC2, pts2);
-          const inlierMask = new cv.Mat();
-          const H = cv.findHomography(mat1, mat2, cv.RANSAC, ransacReprojThreshold, inlierMask);
-          if (!H.empty()) {
-            const hArr = H.data64F?.length ? Array.from(H.data64F) : Array.from(H.data32F);
-            result.homography = hArr.slice(0,9);
-            const maskBytes = new Uint8Array(inlierMask.data);
-            result.inlierMask = maskBytes;
-            result.numInliers = maskBytes.reduce((a,b)=>a+(b?1:0),0);
-          }
-          H.delete(); inlierMask.delete(); mat1.delete(); mat2.delete();
-        }
-      }
-
-      // Stash mats for drawing
-      this._lastDetB = detB;
-      return result;
-    } finally {
-      matcher.delete(); A.delete(); B.delete();
+    // --- Rehydrate source keypoints/descriptors from JSON ---
+    const srcKP = new cv.KeyPointVector();
+    for (const kp of sourceJson.keypoints) {
+      // x,y,size,angle,response,octave, class_id (use defaults for missing)
+      srcKP.push_back(new cv.KeyPoint(kp.x, kp.y, kp.size ?? 31, kp.angle ?? -1,
+                                      kp.response ?? 0, kp.octave ?? 0, kp.class_id ?? -1));
     }
+    const srcDesc = cv.matFromArray(
+      sourceJson.descriptors.rows,
+      sourceJson.descriptors.cols,
+      cv.CV_8U,
+      new Uint8Array(sourceJson.descriptors.data)
+    );
+
+    // --- Detect on target image (ORB) ---
+    const gray = new cv.Mat();
+    cv.cvtColor(targetMat, gray, cv.COLOR_RGBA2GRAY);
+    const orb = new cv.ORB(this._nfeatures || 1200);
+    const tgtKP = new cv.KeyPointVector();
+    const tgtDesc = new cv.Mat();
+    const empty = new cv.Mat();
+    orb.detectAndCompute(gray, empty, tgtKP, tgtDesc, false);
+
+    // --- KNN match (k=2) with ratio test ---
+    const bf = new cv.BFMatcher(cv.NORM_HAMMING, false);
+    const knn = new cv.DMatchVectorVector();
+    bf.knnMatch(srcDesc, tgtDesc, knn, 2);
+
+    const good = [];
+    for (let i = 0; i < knn.size(); i++) {
+      const vec = knn.get(i);            // DMatchVector (HAS delete)
+      if (vec.size() >= 2) {
+        const m = vec.get(0);            // DMatch (plain JS, NO delete)
+        const n = vec.get(1);            // DMatch (plain JS, NO delete)
+        if (m.distance < ratio * n.distance) good.push(m);
+      }
+      vec.delete();                      // ✅ delete the DMatchVector
+    }
+    knn.delete();                        // ✅ delete the outer vector
+
+    // --- Optional: RANSAC homography (needs >= 4 matches) ---
+    let H = null, inliers = 0;
+    if (good.length >= 4) {
+      const srcPts = new cv.Mat(good.length, 1, cv.CV_32FC2);
+      const dstPts = new cv.Mat(good.length, 1, cv.CV_32FC2);
+      for (let i = 0; i < good.length; i++) {
+        const m = good[i];
+        // queryIdx maps to source, trainIdx maps to target
+        const s = srcKP.get(m.queryIdx).pt;
+        const t = tgtKP.get(m.trainIdx).pt;
+        srcPts.data32F[i*2]   = s.x; srcPts.data32F[i*2+1]   = s.y;
+        dstPts.data32F[i*2]   = t.x; dstPts.data32F[i*2+1]   = t.y;
+      }
+      const mask = new cv.Mat();
+      const Hmat = cv.findHomography(srcPts, dstPts, cv.RANSAC, ransacThresh, mask);
+      if (!Hmat.empty()) {
+        H = Array.from(Hmat.data64F ?? Hmat.data32F); // flatten for JSON/readout
+        inliers = cv.countNonZero(mask);
+      }
+      srcPts.delete(); dstPts.delete(); mask.delete();
+      Hmat.delete();
+    }
+
+    // --- Cleanup ---
+    gray.delete();
+    empty.delete();
+    tgtDesc.delete();
+    tgtKP.delete();
+    orb.delete();
+    bf.delete();
+    srcDesc.delete();
+    srcKP.delete();
+
+    return { matches: good, homography: H, numInliers: inliers };
   }
+
 
   // Draw keypoints on canvas
   drawKeypoints(imgRGBA, keypoints, outCanvas) {
