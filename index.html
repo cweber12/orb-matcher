@@ -61,14 +61,16 @@
     window.Module = {
       onRuntimeInitialized() {
         console.log('OpenCV.js ready');
+        window.cvIsReady = true;
         document.dispatchEvent(new Event('cv-ready'));
       }
     };
   </script>
-  <script src="/opencv/opencv.js"></script>
+  <script src="./opencv/opencv.js"></script>
 
   <script type="module">
-    import { ORBModule } from './orb_module.js';
+    import { ORBModule } from './orb_module.js?v=20251104';
+
 
     // ---- elements ----
     const el = (id) => document.getElementById(id);
@@ -80,17 +82,17 @@
     const canvasMatches = el('canvasMatches');
 
     // ---- state ----
-    let mod;                    // ORBModule instance
+    let mod;
     let cvReady = false;
     let imgAReady = false;
     let imgBReady = false;
-    let detectResult = null;    // { keypoints, descriptors, width, height }
-    let loadedJSON = null;      // parsed json from disk
+    let detectResult = null;
+    let loadedJSON = null;
 
-    // ---- helpers ----
     const haveFeatures = () => Boolean(loadedJSON || detectResult);
 
     function refreshButtons() {
+      console.log('refreshButtons', { cvReady, imgAReady, imgBReady, haveFeatures: haveFeatures(), detectResult });
       btnDetect.disabled = !(cvReady && imgAReady);
       btnDownload.disabled = !(detectResult && detectResult.descriptors);
       btnMatch.disabled = !(cvReady && imgBReady && haveFeatures());
@@ -109,6 +111,7 @@
       try {
         mod = new ORBModule(window.cv);
         cvReady = true;
+        console.log('onCvReady → cvReady=true');
       } catch (e) {
         console.error('cv init error', e);
         cvReady = false;
@@ -116,8 +119,8 @@
       refreshButtons();
     }
 
-    // Handle both cases: cv may already be ready or not yet.
-    if (window.cv && window.cv.Mat) onCvReady();
+    // Race-safe cv init
+    if ((window.cv && window.cv.Mat) || window.cvIsReady) onCvReady();
     else document.addEventListener('cv-ready', onCvReady);
 
     // ---- events ----
@@ -127,7 +130,6 @@
       try {
         await loadImg(f, imgA);
         imgAReady = true;
-        // reset previous outputs
         detectResult = null;
         statsA.textContent = '';
         canvasA.hidden = true;
@@ -165,20 +167,18 @@
       refreshButtons();
     });
 
-    // ---- DETECT on Image A ----
+    // Detect ORB
     btnDetect.addEventListener('click', () => {
       if (!cvReady || !imgAReady) return;
       const cv = window.cv;
       const src = cv.imread(imgA);
       const opts = { nfeatures: Number(nfeatures.value) || 1200 };
-
       try {
         detectResult = mod.detectORB(src, opts);
         statsA.textContent =
           `A: ${detectResult.width}x${detectResult.height}\n` +
           `keypoints: ${detectResult.keypoints.length}\n` +
           `descriptors: ${detectResult.descriptors?.rows ?? 0} x ${detectResult.descriptors?.cols ?? 0}`;
-
         canvasA.hidden = false;
         mod.drawKeypoints(src, detectResult.keypoints, canvasA);
       } catch (e) {
@@ -191,7 +191,7 @@
       }
     });
 
-    // ---- DOWNLOAD features.json ----
+    // Download JSON
     btnDownload.addEventListener('click', () => {
       if (!detectResult) return;
       const json = mod.exportJSON(detectResult);
@@ -203,30 +203,24 @@
       URL.revokeObjectURL(a.href);
     });
 
-    // ---- MATCH: features.json (or in-memory detectResult) vs Image B ----
+    // Match
     btnMatch.addEventListener('click', () => {
       if (!cvReady || !imgBReady) return;
       if (!loadedJSON && !detectResult) { alert('Load features.json or run Detect on Image A first.'); return; }
-
       const cv = window.cv;
       const target = cv.imread(imgB);
       const source = loadedJSON || mod.exportJSON(detectResult);
-
       try {
-        const matchOpts = {
+        const res = mod.matchToTarget(source, target, {
           useKnn: true,
           ratio: Number(ratio.value) || 0.75,
           ransacReprojThreshold: Number(ransac.value) || 3.0
-        };
-        const res = mod.matchToTarget(source, target, matchOpts);
-
+        });
         statsB.textContent =
           `B: ${target.cols}x${target.rows}\n` +
           `matches: ${res.matches.length}\n` +
           `inliers: ${res.numInliers ?? 0}\n` +
           (res.homography ? `H: [${res.homography.map(v => v.toFixed(3)).join(', ')}]` : 'H: (none)');
-
-        // visualize (A | B)
         const A = cv.imread(imgA);
         mod.drawMatches(A, target, source.keypoints, res);
         cv.imshow(canvasMatches, mod._lastCanvasMat);
@@ -242,6 +236,7 @@
       }
     });
   </script>
+
 
 </body>
 </html>
