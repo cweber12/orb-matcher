@@ -68,86 +68,87 @@ export class ORBModule {
   }
 
   // Match JSON features (Image A) against a target Mat (Image B)
-  matchToTarget(sourceJson, targetMat, opts = {}) {
-    const cv = this.cv;
-    const ratio = opts.ratio ?? 0.75;
-    const ransacThresh = opts.ransacReprojThreshold ?? 3.0;
+ // Match JSON features (Image A) against a target Mat (Image B)
+matchToTarget(sourceJson, targetMat, opts = {}) {
+  const cv = this.cv;
+  const ratio = opts.ratio ?? 0.75;
+  const ransacThresh = opts.ransacReprojThreshold ?? 3.0;
 
-    // --- Rehydrate source keypoints/descriptors from JSON ---
-    const srcKP = new cv.KeyPointVector();
-    for (const kp of sourceJson.keypoints) {
-      // x,y,size,angle,response,octave, class_id (use defaults for missing)
-      srcKP.push_back(new cv.KeyPoint(kp.x, kp.y, kp.size ?? 31, kp.angle ?? -1,
-                                      kp.response ?? 0, kp.octave ?? 0, kp.class_id ?? -1));
-    }
-    const srcDesc = cv.matFromArray(
-      sourceJson.descriptors.rows,
-      sourceJson.descriptors.cols,
-      cv.CV_8U,
-      new Uint8Array(sourceJson.descriptors.data)
-    );
-
-    // --- Detect on target image (ORB) ---
-    const gray = new cv.Mat();
-    cv.cvtColor(targetMat, gray, cv.COLOR_RGBA2GRAY);
-    const orb = new cv.ORB(this._nfeatures || 1200);
-    const tgtKP = new cv.KeyPointVector();
-    const tgtDesc = new cv.Mat();
-    const empty = new cv.Mat();
-    orb.detectAndCompute(gray, empty, tgtKP, tgtDesc, false);
-
-    // --- KNN match (k=2) with ratio test ---
-    const bf = new cv.BFMatcher(cv.NORM_HAMMING, false);
-    const knn = new cv.DMatchVectorVector();
-    bf.knnMatch(srcDesc, tgtDesc, knn, 2);
-
-    const good = [];
-    for (let i = 0; i < knn.size(); i++) {
-      const vec = knn.get(i);            // DMatchVector (HAS delete)
-      if (vec.size() >= 2) {
-        const m = vec.get(0);            // DMatch (plain JS, NO delete)
-        const n = vec.get(1);            // DMatch (plain JS, NO delete)
-        if (m.distance < ratio * n.distance) good.push(m);
-      }
-      vec.delete();                      // ✅ delete the DMatchVector
-    }
-    knn.delete();                        // ✅ delete the outer vector
-
-    // --- Optional: RANSAC homography (needs >= 4 matches) ---
-    let H = null, inliers = 0;
-    if (good.length >= 4) {
-      const srcPts = new cv.Mat(good.length, 1, cv.CV_32FC2);
-      const dstPts = new cv.Mat(good.length, 1, cv.CV_32FC2);
-      for (let i = 0; i < good.length; i++) {
-        const m = good[i];
-        // queryIdx maps to source, trainIdx maps to target
-        const s = srcKP.get(m.queryIdx).pt;
-        const t = tgtKP.get(m.trainIdx).pt;
-        srcPts.data32F[i*2]   = s.x; srcPts.data32F[i*2+1]   = s.y;
-        dstPts.data32F[i*2]   = t.x; dstPts.data32F[i*2+1]   = t.y;
-      }
-      const mask = new cv.Mat();
-      const Hmat = cv.findHomography(srcPts, dstPts, cv.RANSAC, ransacThresh, mask);
-      if (!Hmat.empty()) {
-        H = Array.from(Hmat.data64F ?? Hmat.data32F); // flatten for JSON/readout
-        inliers = cv.countNonZero(mask);
-      }
-      srcPts.delete(); dstPts.delete(); mask.delete();
-      Hmat.delete();
-    }
-
-    // --- Cleanup ---
-    gray.delete();
-    empty.delete();
-    tgtDesc.delete();
-    tgtKP.delete();
-    orb.delete();
-    bf.delete();
-    srcDesc.delete();
-    srcKP.delete();
-
-    return { matches: good, homography: H, numInliers: inliers };
+  // --- Rebuild descriptors from JSON (no cv.KeyPoint construction) ---
+  if (!sourceJson?.descriptors?.rows || !sourceJson?.descriptors?.cols) {
+    throw new Error('Invalid features JSON: missing descriptors');
   }
+  const srcU8 = sourceJson.descriptors.data
+    ? new Uint8Array(sourceJson.descriptors.data)
+    : this._b64ToU8(sourceJson.descriptors.data_b64);
+
+  const srcDesc = cv.matFromArray(
+    sourceJson.descriptors.rows,
+    sourceJson.descriptors.cols,
+    cv.CV_8U,
+    srcU8
+  );
+
+  // --- Detect on target (ORB) ---
+  const gray = new cv.Mat();
+  cv.cvtColor(targetMat, gray, cv.COLOR_RGBA2GRAY);
+  const orb = new cv.ORB(this._nfeatures || 1200);
+  const tgtKP = new cv.KeyPointVector();
+  const tgtDesc = new cv.Mat();
+  const empty = new cv.Mat();
+  orb.detectAndCompute(gray, empty, tgtKP, tgtDesc, false);
+
+  // --- KNN match (k=2) + ratio test ---
+  const bf = new cv.BFMatcher(cv.NORM_HAMMING, false);
+  const knn = new cv.DMatchVectorVector();
+  bf.knnMatch(srcDesc, tgtDesc, knn, 2);
+
+  const good = [];
+  for (let i = 0; i < knn.size(); i++) {
+    const vec = knn.get(i);              // DMatchVector (needs delete)
+    if (vec.size() >= 2) {
+      const m = vec.get(0);              // DMatch (plain)
+      const n = vec.get(1);
+      if (m.distance < ratio * n.distance) good.push(m);
+    }
+    vec.delete();
+  }
+  knn.delete();
+
+  // --- Homography with RANSAC (>=4 matches) ---
+  let H = null, inliers = 0, inlierMask = null;
+  if (good.length >= 4) {
+    const srcPts = new cv.Mat(good.length, 1, cv.CV_32FC2);
+    const dstPts = new cv.Mat(good.length, 1, cv.CV_32FC2);
+    for (let i = 0; i < good.length; i++) {
+      const m = good[i];
+      // source uses JSON keypoints:
+      const s = sourceJson.keypoints[m.queryIdx];   // {x,y}
+      // target uses detector KeyPointVector:
+      const t = tgtKP.get(m.trainIdx).pt;           // Point2f
+      srcPts.data32F[i*2]   = s.x; srcPts.data32F[i*2+1]   = s.y;
+      dstPts.data32F[i*2]   = t.x; dstPts.data32F[i*2+1]   = t.y;
+    }
+    const mask = new cv.Mat();
+    const Hmat = cv.findHomography(srcPts, dstPts, cv.RANSAC, ransacThresh, mask);
+    if (!Hmat.empty()) {
+      H = Array.from(Hmat.data64F ?? Hmat.data32F);
+      inliers = cv.countNonZero(mask);
+      inlierMask = Array.from(mask.data).map(v => v !== 0);
+    }
+    srcPts.delete(); dstPts.delete(); mask.delete(); Hmat.delete();
+  }
+
+  // Cache target KPs for drawMatches
+  const tgtKP_JS = this._serializeKeypoints(tgtKP);
+  this._lastDetB = { keypoints: tgtKP_JS };
+
+  // Cleanup
+  gray.delete(); empty.delete(); tgtDesc.delete(); tgtKP.delete(); orb.delete(); bf.delete(); srcDesc.delete();
+
+  return { matches: good, homography: H, numInliers: inliers, inlierMask };
+}
+
 
 
   // Draw keypoints on canvas
