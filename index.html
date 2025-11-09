@@ -7,13 +7,13 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <h1>ORB Feature Tool</h1>
-  <p class="muted">Detect features on Image A → download <code>features.json</code> → load Image B + JSON → match & visualize.</p>
+  <h1 class="title">ORB Feature Tool</h1>
+  <p class="instructions"><strong>Instructions: </strong>Detect features on Image A → download <code>features.json</code> → load Image B + JSON → match & visualize.</p>
 
   <div class="grid">
     <!-- Left: Detect & Export -->
     <div class="card">
-      <h2>1) Detect features (Image A)</h2>
+      <h2>1) Detect ORB features in Image A + export <code>features.json</code></h2>
       <div class="row">
         <input id="fileA" type="file" accept="image/*" />
         <button id="btnDetect" disabled>Detect ORB</button>
@@ -24,9 +24,20 @@
         ratio <input id="ratio" type="number" step="0.01" value="0.75" style="width:80px">
         RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:90px">
       </div>
-      <img id="imgA" alt="Image A preview" />
+      <img id="imgA" alt="Image A preview" hidden/>
       <canvas id="canvasA" hidden></canvas>
       <div id="statsA" class="mono muted"></div>
+    </div>
+
+    <div class="card">
+      <h2>3) Extract frame from video</h2>
+      <div class="row">
+        <input id="fileVideo" type="file" accept="video/*" />
+        <input id="frameNumber" type="number" min="0" value="0" style="width:80px" disabled />
+        <button id="btnExtractFrame" disabled>Extract Frame</button>
+      </div>
+      <video id="videoPreview" hidden controls style="max-width:100%;"></video>
+      <canvas id="canvasFrame" hidden></canvas>
     </div>
 
     <!-- Right: Import JSON + match to Image B -->
@@ -39,7 +50,7 @@
       <div class="row">
         <button id="btnMatch" disabled>Match</button>
       </div>
-      <img id="imgB" alt="Image B preview" />
+      <img id="imgB" alt="Image B preview" hidden/>
       <canvas id="canvasMatches" hidden></canvas>
       <div id="statsB" class="mono muted"></div>
     </div>
@@ -50,7 +61,7 @@
       locateFile: (f) => `./opencv/${f}`,
       onRuntimeInitialized() {
         console.log('OpenCV.js ready');
-        window.cvIsReady = true;            // <<— add this line
+        window.cvIsReady = true;           
         document.dispatchEvent(new Event('cv-ready'));
       },
       print: (txt) => console.log('[opencv]', txt),
@@ -62,9 +73,11 @@
 
   <script type="module">
     import { ORBModule } from './orb_module.js?v=20251104';
+    import { VideoFrameExtractor } from './video_frame_extractor.js?v=20251104';
 
 
     // ---- elements ----
+    // ORB feature tool elements
     const el = (id) => document.getElementById(id);
     const fileA = el('fileA'), imgA = el('imgA'), canvasA = el('canvasA');
     const fileJSON = el('fileJSON'), fileB = el('fileB'), imgB = el('imgB');
@@ -72,14 +85,23 @@
     const statsA = el('statsA'), statsB = el('statsB');
     const nfeatures = el('nfeatures'), ratio = el('ratio'), ransac = el('ransac');
     const canvasMatches = el('canvasMatches');
+    // Video frame extractor elements
+    const fileVideo = el('fileVideo');
+    const frameNumber = el('frameNumber');
+    const btnExtractFrame = el('btnExtractFrame');
+    const videoPreview = el('videoPreview');
+    const canvasFrame = el('canvasFrame');
 
     // ---- state ----
+    // ORB feature tool state
     let mod;
     let cvReady = false;
     let imgAReady = false;
     let imgBReady = false;
     let detectResult = null;
     let loadedJSON = null;
+    // Video frame extractor state
+    let videoExtractor;
 
     const haveFeatures = () => Boolean(loadedJSON || detectResult);
 
@@ -168,37 +190,85 @@
     }
 
     // ---- events ----
+
+    // Enable frame input and button when video is loaded
+    fileVideo.addEventListener('change', () => {
+      const f = fileVideo.files?.[0];
+      if (!f) return;
+      const url = URL.createObjectURL(f);
+      videoPreview.src = url;
+      videoPreview.load();
+      videoPreview.hidden = false;
+      frameNumber.disabled = false;
+      btnExtractFrame.disabled = false;
+      videoExtractor = new VideoFrameExtractor(videoPreview, canvasFrame);
+    });
+
+    // Extract frame button
+    btnExtractFrame.addEventListener('click', async () => {
+      const frameIdx = Number(frameNumber.value) || 0;
+      const fps = 25; // Can make this user configurable later
+      try {
+        await videoExtractor.extractFrame(frameIdx, fps);
+        // Use the canvas directly for ORB detection
+        const srcMat = matFromImageEl(canvasFrame);
+
+        // Run ORB detection
+        detectResult = mod.detectORB(srcMat, { nfeatures: Number(nfeatures.value) || 1200 });
+        statsA.textContent =
+          `A: ${detectResult.width}x${detectResult.height}\n` +
+          `keypoints: ${detectResult.keypoints.length}\n` +
+          `descriptors: ${detectResult.descriptors?.rows ?? 0} x ${detectResult.descriptors?.cols ?? 0}`;
+        canvasA.hidden = false;
+        mod.drawKeypoints(srcMat, detectResult.keypoints, canvasA);
+        srcMat.delete();
+        imgAReady = true;
+        refreshButtons();
+      } catch (e) {
+        alert('Frame extraction failed: ' + e);
+        imgAReady = false;
+        refreshButtons();
+      }
+    });
+
+    // Image A load
     fileA.addEventListener('change', async () => {
       const f = fileA.files?.[0];
       if (!f) return;
       try {
         await loadImg(f, imgA);
         imgAReady = true;
+        imgA.hidden = false;
         detectResult = null;
         statsA.textContent = '';
         canvasA.hidden = true;
       } catch (e) {
         console.error('Image A preview error', e);
         imgAReady = false;
+        imgA.hidden = true;
       }
       refreshButtons();
     });
 
+    // Image B load
     fileB.addEventListener('change', async () => {
       const f = fileB.files?.[0];
       if (!f) return;
       try {
         await loadImg(f, imgB);
         imgBReady = true;
+        imgB.hidden = false;
         statsB.textContent = '';
         canvasMatches.hidden = true;
       } catch (e) {
         console.error('Image B preview error', e);
         imgBReady = false;
+        imgB.hidden = true;
       }
       refreshButtons();
     });
 
+    // JSON load
     fileJSON.addEventListener('change', async () => {
       const f = fileJSON.files?.[0];
       if (!f) return;
