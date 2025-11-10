@@ -5,7 +5,7 @@
 }
 
 html {
-    background: linear-gradient(180deg, #212d38 0%, #153528 100%);
+    background: linear-gradient(180deg, #272727 0%, #152335 100%);
     background-position: center; 
     background-size: cover;
     background-repeat: no-repeat; 
@@ -13,6 +13,9 @@ html {
 }
 
 body { 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center;
     margin: 24px; 
 }
 
@@ -20,17 +23,19 @@ body {
     color: white; 
     font-size: 32px; 
     margin-bottom: 16px; 
+    text-decoration: underline; 
 }
 
 .grid { 
     display: grid; 
     gap: 16px; 
+    max-width: 80vw;
     grid-template-columns: repeat(2, minmax(0, 1fr)); 
 }
 
 .card { 
     border: 1px solid #e5e7eb; 
-    border-radius: 12px; 
+    border-radius: 4px; 
     padding: 16px;
     background: white;
     box-shadow: 0 1px 3px rgba(0,0,0,.04); 
@@ -42,9 +47,9 @@ h2 {
 }
 
 button { 
-    padding: 8px 12px; 
-    border-radius: 8px; 
-    border: 1px solid #d1d5db; 
+    padding: 4px 12px; 
+    border-radius: 6px; 
+    border: 1px solid #787878; 
     background: dodgerblue; 
     color: white; 
     cursor: pointer; 
@@ -73,8 +78,8 @@ button:disabled {
     margin-bottom: 24px; 
 }
 
-canvas, img { 
-    max-width: 100%; 
+canvas, img, video { 
+    max-width: 45%; 
     border-radius: 8px; 
     border: 1px solid #e5e7eb; 
 }

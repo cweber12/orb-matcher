@@ -2,18 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>ORB Feature Tool (Detect → Save JSON → Match)</title>
+  <title>ORB Feature Tool</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <h1 class="title">ORB Feature Tool</h1>
-  <p class="instructions"><strong>Instructions: </strong>Detect features on Image A → download <code>features.json</code> → load Image B + JSON → match & visualize.</p>
-
+  <p style="color:white; margin-top:0;">
+    Detects ORB (Oriented FAST and Rotated BRIEF) features in uploaded image or video frame A 
+    and matches them to image B.
+  </p>
+  <!-- Main grid containing all cards (img upload, video frame extraction, matching) -->
   <div class="grid">
-    <!-- Left: Detect & Export -->
+    <!-- Upload image A, detect ORB features and export features.json -->
     <div class="card">
-      <h2>1) Detect ORB features in Image A + export <code>features.json</code></h2>
+      <h2>Upload Image A and Extract ORB features</h2>
+      <p>Upload image, detect features & export <code>features.json</code></p>
       <div class="row">
         <input id="fileA" type="file" accept="image/*" />
         <button id="btnDetect" disabled>Detect ORB</button>
@@ -21,16 +25,20 @@
       </div>
       <div class="row muted">
         nfeatures <input id="nfeatures" type="number" value="1200" min="100" max="5000" style="width:90px">
+        edgeThreshold <input id="edgeThreshold" type="number" value="31" min="1" max="100" style="width:90px">
         ratio <input id="ratio" type="number" step="0.01" value="0.75" style="width:80px">
         RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:90px">
+        
       </div>
       <img id="imgA" alt="Image A preview" hidden/>
       <canvas id="canvasA" hidden></canvas>
       <div id="statsA" class="mono muted"></div>
     </div>
 
+    <!-- Extract video frame, pass to ORB detection (prev card) -->
     <div class="card">
-      <h2>3) Extract frame from video</h2>
+      <h2>Extract Video Frame</h2>
+      <p>Upload a video file, specify frame number, and extract frame for ORB detection.</p>
       <div class="row">
         <input id="fileVideo" type="file" accept="video/*" />
         <input id="frameNumber" type="number" min="0" value="0" style="width:80px" disabled />
@@ -40,9 +48,10 @@
       <canvas id="canvasFrame" hidden></canvas>
     </div>
 
-    <!-- Right: Import JSON + match to Image B -->
+    <!-- Import JSON + match to Image B -->
     <div class="card">
-      <h2>2) Load features.json + match to Image B</h2>
+      <h2>Match ORB Features to Image B</h2>
+      <p>Upload image B and <code>features.json</code> to find matches.</p>
       <div class="row">
         <input id="fileJSON" type="file" accept=".json,application/json" />
         <input id="fileB" type="file" accept="image/*" />
@@ -51,9 +60,10 @@
         <button id="btnMatch" disabled>Match</button>
       </div>
       <img id="imgB" alt="Image B preview" hidden/>
-      <canvas id="canvasMatches" hidden></canvas>
+      <canvas id="canvasMatches" style="width:100%" hidden></canvas>
       <div id="statsB" class="mono muted"></div>
     </div>
+    
   </div>
 
   <script>
@@ -83,7 +93,7 @@
     const fileJSON = el('fileJSON'), fileB = el('fileB'), imgB = el('imgB');
     const btnDetect = el('btnDetect'), btnDownload = el('btnDownload'), btnMatch = el('btnMatch');
     const statsA = el('statsA'), statsB = el('statsB');
-    const nfeatures = el('nfeatures'), ratio = el('ratio'), ransac = el('ransac');
+    const nfeatures = el('nfeatures'), ratio = el('ratio'), ransac = el('ransac'), edgeThreshold = el('edgeThreshold');
     const canvasMatches = el('canvasMatches');
     // Video frame extractor elements
     const fileVideo = el('fileVideo');
@@ -287,7 +297,10 @@
       const cv = window.cv;
       // const src = cv.imread(imgA);
       const src = matFromImageEl(imgA); 
-      const opts = { nfeatures: Number(nfeatures.value) || 1200 };
+      const opts = { 
+        nfeatures: Number(nfeatures.value) || 1200,
+        edgeThreshold: Number(edgeThreshold.value) || 31
+      };
       try {
         detectResult = mod.detectORB(src, opts);
         statsA.textContent =
@@ -342,6 +355,7 @@
         mod.drawMatches(A, target, source.keypoints, res);
         // cv.imshow(canvasMatches, mod._lastCanvasMat);
         imshowCompat(canvasMatches, mod._lastCanvasMat); // custom imshow
+        fileB.hidden = true;
         canvasMatches.hidden = false;
         A.delete();
         mod._releaseLastCanvasMat();

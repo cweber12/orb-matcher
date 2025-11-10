@@ -1,33 +1,41 @@
 // orb_module.js
+// ORB feature detection and matching using OpenCV.js
 export class ORBModule {
   constructor(cv) { this.cv = cv; this._lastCanvasMat = null; }
 
   // Detect ORB on an RGBA image Mat
   detectORB(srcRGBA, opts = {}) {
-    const cv = this.cv;
+    const cv = this.cv; 
+    // Default parameters
     const {
-      nfeatures = 1200,
-      scaleFactor = 1.2,
-      nlevels = 8,
-      edgeThreshold = 31,
-      firstLevel = 0,
-      WTA_K = 2,
-      scoreType = cv.ORB_HARRIS_SCORE,
-      patchSize = 31,
-      fastThreshold = 20
-    } = opts;
+      nfeatures = 1200, // Number of features to detect
+      scaleFactor = 1.2, // Pyramid scale factor
+      nlevels = 8, // Number of pyramid levels
+      edgeThreshold = 31, // Size of the border where features are not detected
+      firstLevel = 0, // Level of pyramid to put source image to
+      WTA_K = 2, // Number of points that produce each element of the oriented BRIEF descriptor
+      scoreType = cv.ORB_HARRIS_SCORE, // Score type (HARRIS or FAST)
+      patchSize = 31, // Size of the patch used by the oriented BRIEF descriptor
+      fastThreshold = 20 // FAST threshold
+    } = opts; 
 
-    // Gray
+    // Create new Mats and ORB detector
     const gray = new cv.Mat();
     cv.cvtColor(srcRGBA, gray, cv.COLOR_RGBA2GRAY);
 
+    // Create ORB detector with specified parameters
     const orb = new cv.ORB(nfeatures, scaleFactor, nlevels, edgeThreshold, firstLevel, WTA_K, scoreType, patchSize, fastThreshold);
+    // Detect keypoints and compute descriptors
     const kpVec = new cv.KeyPointVector();
     const des = new cv.Mat();
 
+    // Perform detection and computation
     try {
+      // Detect and compute
       orb.detectAndCompute(gray, new cv.Mat(), kpVec, des);
+      // Serialize keypoints and descriptors
       const keypoints = this._serializeKeypoints(kpVec);
+      // Serialize descriptors
       const descriptors = this._serializeDescriptors(des);
       return { keypoints, descriptors, width: srcRGBA.cols, height: srcRGBA.rows };
     } finally {
