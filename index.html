@@ -30,7 +30,11 @@
         RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:90px">
         
       </div>
-      <img id="imgA" alt="Image A preview" hidden/>
+      <div style="position:relative; display:inline-block;">
+        <img id="imgA" alt="Image A preview" hidden/>
+        <div id="cropBox"
+             style="position:absolute; border:2px dashed #00f; background:rgba(0,0,255,0.1); cursor:move; display:none;"></div>
+      </div>
       <canvas id="canvasA" hidden></canvas>
       <div id="statsA" class="mono muted"></div>
     </div>
@@ -66,6 +70,7 @@
     
   </div>
 
+  <!-- OpenCV.js setup -->
   <script>
     window.Module = {
       locateFile: (f) => `./opencv/${f}`,
@@ -81,12 +86,15 @@
   </script>
   <script src="./opencv/opencv.js"></script>
 
+  <!-- Main application script -->
   <script type="module">
     import { ORBModule } from './orb_module.js?v=20251104';
     import { VideoFrameExtractor } from './video_frame_extractor.js?v=20251104';
 
+    // ------------------------------------------------
+    //                   ELEMENTS 
+    // ------------------------------------------------
 
-    // ---- elements ----
     // ORB feature tool elements
     const el = (id) => document.getElementById(id);
     const fileA = el('fileA'), imgA = el('imgA'), canvasA = el('canvasA');
@@ -102,7 +110,10 @@
     const videoPreview = el('videoPreview');
     const canvasFrame = el('canvasFrame');
 
-    // ---- state ----
+    // ------------------------------------------------
+    //                     STATE 
+    // ------------------------------------------------
+
     // ORB feature tool state
     let mod;
     let cvReady = false;
@@ -115,80 +126,155 @@
 
     const haveFeatures = () => Boolean(loadedJSON || detectResult);
 
-    // ---- helpers ----
+    // ------------------------------------------------
+    //                     HELPERS 
+    // ------------------------------------------------
+
+    // Temporary offscreen canvas for image to Mat conversion
     const __tmpCanvas = document.createElement('canvas');
+    // Context for the temporary canvas
     const __tmpCtx = __tmpCanvas.getContext('2d', { willReadFrequently: true });
 
+    // Convert an HTMLImageElement to cv.Mat (CV_8UC4)
+    // -----------------------------------------------
     function matFromImageEl(imgEl) {
+      // Get image dimensions, use natural size if available
       const w = imgEl.naturalWidth || imgEl.width;
       const h = imgEl.naturalHeight || imgEl.height;
-
       // Draw the <img> to an offscreen canvas and grab RGBA bytes
-      __tmpCanvas.width = w;
-      __tmpCanvas.height = h;
-      __tmpCtx.clearRect(0, 0, w, h);
-      __tmpCtx.drawImage(imgEl, 0, 0, w, h);
-      const imageData = __tmpCtx.getImageData(0, 0, w, h);
+      __tmpCanvas.width = w; // set canvas to image width
+      __tmpCanvas.height = h; // set canvas to image height
+      __tmpCtx.clearRect(0, 0, w, h); // clear canvas
+      __tmpCtx.drawImage(imgEl, 0, 0, w, h); // draw image to canvas
+      const imageData = __tmpCtx.getImageData(0, 0, w, h); // get RGBA pixel data
 
       // Allocate CV_8UC4 without using 'new cv.Mat(...)'
       const mat = window.cv.Mat.zeros(h, w, window.cv.CV_8UC4);
       mat.data.set(imageData.data);   // copy RGBA buffer in
-      return mat;
+      return mat; // return CV_8UC4 Mat
     }
 
+    // Crop an image element to a specified rectangle 
+    // -----------------------------------------------
+    // cropRect: { x, y, width, height }
+    function cropImage(imgEl, cropRect) {
+      // Create a canvas to hold the cropped image
+      const cropCanvas = document.createElement('canvas');
+      // Set the canvas size to the crop rectangle size
+      cropCanvas.width = cropRect.width; 
+      cropCanvas.height = cropRect.height;
+      // Get the 2D context and draw the cropped area
+      const ctx = cropCanvas.getContext('2d');
+      ctx.drawImage(
+        imgEl, // Source image element
+        cropRect.x, cropRect.y, cropRect.width, cropRect.height, // Source rectangle
+        0, 0, cropRect.width, cropRect.height // Destination rectangle
+      );
+      // Return the cropped canvas
+      return cropCanvas;
+    }
+   
+    // Compatible imshow function: uses cv.imshow if available, 
+    // otherwise converts Mat to ImageData and draws to canvas
+    // -----------------------------------------------
     function imshowCompat(canvas, mat) {
-      if (window.cv.imshow) { // if your build has it, use it
-        window.cv.imshow(canvas, mat);
+      if (window.cv.imshow) { // if the build supports imshow
+        window.cv.imshow(canvas, mat); // use it directly
         return;
       }
-      // Ensure RGBA, then paint with putImageData
-      let rgba = mat;
+      
+      let rgba = mat; // placeholder for RGBA Mat
+      
+      /* 
+      Convert the input Mat to RGBA format for display on a canvas. OpenCV Mats can 
+      have different channel formats (RGB, RGBA). This ensures the Mat is always in 
+      CV_8UC4 (RGBA) format for compatibility with ImageData and canvas.
+      */
+
+      // If the Mat is in 3-channel RGB format (CV_8UC3), convert it to 4-channel RGBA.
       if (mat.type() === window.cv.CV_8UC3) {
-        rgba = new window.cv.Mat();
-        window.cv.cvtColor(mat, rgba, window.cv.COLOR_RGB2RGBA);
+        rgba = new window.cv.Mat(); // Create an empty Mat for the result
+        window.cv.cvtColor(mat, rgba, window.cv.COLOR_RGB2RGBA); // Convert RGB to RGBA
+
+      // If the Mat is not already in 4-channel RGBA format (CV_8UC4), convert it.
       } else if (mat.type() !== window.cv.CV_8UC4) {
-        const tmp = new window.cv.Mat();
-        window.cv.cvtColor(mat, tmp, window.cv.COLOR_RGBA2RGBA);
-        rgba = tmp;
+        const tmp = new window.cv.Mat(); // Temporary Mat for conversion
+        window.cv.cvtColor(mat, tmp, window.cv.COLOR_RGBA2RGBA); // Convert to RGBA
+        rgba = tmp; // Use the converted Mat
+      
+      // If the Mat is already in RGBA format, clone it to avoid modifying the original.
       } else {
         rgba = mat.clone();
       }
+
+      // Create ImageData from the RGBA Mat data
       const imageData = new ImageData(
-        new Uint8ClampedArray(rgba.data),
-        rgba.cols, rgba.rows
+        new Uint8ClampedArray(rgba.data), // pixel data
+        rgba.cols, rgba.rows // width and height
       );
-      canvas.width = rgba.cols;
-      canvas.height = rgba.rows;
-      canvas.getContext('2d').putImageData(imageData, 0, 0);
-      rgba.delete();
+
+      // Resize the canvas and put the ImageData onto it
+      canvas.width = rgba.cols; // set canvas width
+      canvas.height = rgba.rows; // set canvas height
+      canvas.getContext('2d').putImageData(imageData, 0, 0); // draw image data
+      rgba.delete(); // clean up temporary Mat if created
     }
     
+    // Refresh button enabled/disabled states 
+    // ------------------------------------------------
     function refreshButtons() {
+      // Log current states for debugging
       console.log('refreshButtons', { cvReady, imgAReady, imgBReady, haveFeatures: haveFeatures(), detectResult });
-      btnDetect.disabled = !(cvReady && imgAReady);
-      btnDownload.disabled = !(detectResult && detectResult.descriptors);
-      btnMatch.disabled = !(cvReady && imgBReady && haveFeatures());
+      btnDetect.disabled = !(cvReady && imgAReady); // Detect enabled if cv and imgA ready
+      btnDownload.disabled = !(detectResult && detectResult.descriptors); // Download enabled if detection result with descriptors
+      btnMatch.disabled = !(cvReady && imgBReady && haveFeatures()); // Match enabled if cv, imgB ready and features available
     }
 
+    // Load an image file into an HTMLImageElement
+    // ------------------------------------------------
     function loadImg(file, imgEl) {
+      // Return a promise that resolves when the image is loaded
       return new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => { imgEl.onload = () => res(); imgEl.onerror = rej; imgEl.src = r.result; };
-        r.onerror = rej;
-        r.readAsDataURL(file);
+        const r = new FileReader(); // FileReader to read the file
+        r.onload = () => { imgEl.onload = () => res(); imgEl.onerror = rej; imgEl.src = r.result; }; // onload handler
+        r.onerror = rej; // onerror handler
+        r.readAsDataURL(file); // read file as data URL
       });
     }
 
+    // Get crop rectangle relative to image A
+    // ------------------------------------------------
+    function getCropRect() {
+      const imgRect = imgA.getBoundingClientRect(); // get image A bounding rect
+      const cropRect = cropBox.getBoundingClientRect(); // get crop box bounding rect
+      // calculate crop rectangle relative to image A
+      return {
+        x: cropRect.left - imgRect.left, // relative x position
+        y: cropRect.top - imgRect.top, // relative y position
+        width: cropRect.width, // relative width
+        height: cropRect.height // relative height
+      };
+    }
+
+    // ------------------------------------------------
+    //           INITIALIZATION
+    // ------------------------------------------------
+
+    // Initialize ORBModule when OpenCV.js is ready
+    // ------------------------------------------------
     function onCvReady() {
+      // Create ORBModule instance
       try {
-        mod = new ORBModule(window.cv);
-        cvReady = true;
-        console.log('onCvReady → cvReady=true');
-        console.log('cv.imread:', typeof window.cv.imread);
+        mod = new ORBModule(window.cv); // create ORBModule instance
+        cvReady = true; // set cvReady flag
+        console.log('onCvReady → cvReady=true'); // log readiness
+        console.log('cv.imread:', typeof window.cv.imread); // log imread availability
+      // Catch any errors during initialization
       } catch (e) {
         console.error('cv init error', e);
         cvReady = false;
       }
+      // Refresh button states
       refreshButtons();
     }
 
@@ -199,8 +285,47 @@
       document.addEventListener('cv-ready', onCvReady, { once: true });
     }
 
-    // ---- events ----
+    // ------------------------------------------------
+    //                     EVENTS 
+    // ------------------------------------------------
 
+    // ________________________________________________
+    // CROP BOX DRAGGING
+    
+    // Define drag behavior for crop box
+    const cropBox = document.getElementById('cropBox');
+    let isDragging = false, startX, startY, startLeft, startTop;
+
+    // Mouse down on crop box to start dragging
+    // -----------------------------------------------
+    cropBox.addEventListener('mousedown', (e) => {
+      isDragging = true; // set dragging flag
+      startX = e.clientX; // record start X
+      startY = e.clientY; // record start Y
+      startLeft = parseInt(cropBox.style.left, 10); // record start left position
+      startTop = parseInt(cropBox.style.top, 10); // record start top position
+      e.preventDefault(); // prevent default behavior
+    });
+
+    // Mouse move to drag crop box
+    // -----------------------------------------------
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return; // if not dragging, exit
+      const dx = e.clientX - startX; // calculate delta X
+      const dy = e.clientY - startY; // calculate delta Y
+      cropBox.style.left = `${startLeft + dx}px`; // update left position
+      cropBox.style.top = `${startTop + dy}px`; // update top position
+    });
+
+    // Mouse up to stop dragging
+    // -----------------------------------------------
+    document.addEventListener('mouseup', () => {
+      isDragging = false; // clear dragging flag
+    });
+    
+    // END CROP BOX DRAGGING
+    // ________________________________________________
+    
     // Enable frame input and button when video is loaded
     fileVideo.addEventListener('change', () => {
       const f = fileVideo.files?.[0];
@@ -243,15 +368,23 @@
 
     // Image A load
     fileA.addEventListener('change', async () => {
-      const f = fileA.files?.[0];
-      if (!f) return;
-      try {
-        await loadImg(f, imgA);
-        imgAReady = true;
-        imgA.hidden = false;
-        detectResult = null;
-        statsA.textContent = '';
-        canvasA.hidden = true;
+      const f = fileA.files?.[0]; // get selected file
+      if (!f) return; // if no file, exit
+      try { // try to load image
+        await loadImg(f, imgA); // load image into imgA element
+        imgAReady = true; // set imgAReady flag
+        imgA.hidden = false; // show imgA element
+        detectResult = null; // reset previous detection result
+        statsA.textContent = ''; // clear stats
+        canvasA.hidden = true; // hide canvasA
+
+        // Show crop box
+        cropBox.style.display = 'block';
+        cropBox.style.left = '50px';
+        cropBox.style.top = '50px';
+        cropBox.style.width = '100px';
+        cropBox.style.height = '100px';
+
       } catch (e) {
         console.error('Image A preview error', e);
         imgAReady = false;
@@ -368,7 +501,6 @@
       }
     });
   </script>
-
 
 </body>
 </html>
