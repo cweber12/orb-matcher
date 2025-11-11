@@ -80,7 +80,7 @@ button:disabled {
 
 canvas, img, video { 
     max-width: 45%; 
-    border-radius: 8px; 
+    border-radius: 4px; 
     border: 1px solid #e5e7eb; 
 }
 
@@ -95,12 +95,33 @@ canvas, img, video {
     position: absolute;
     width: 12px;
     height: 12px;
-    background: #00f;
-    border-radius: 50%;
-    border: 2px solid #fff;
     z-index: 2;
 }
-.resize-handle[data-corner="nw"] { left: -6px; top: -6px; cursor: nwse-resize; }
-.resize-handle[data-corner="ne"] { right: -6px; top: -6px; cursor: nesw-resize; }
-.resize-handle[data-corner="sw"] { left: -6px; bottom: -6px; cursor: nesw-resize; }
-.resize-handle[data-corner="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.resize-handle[data-corner="nw"] { 
+    left: -2px; 
+    top: -2px; 
+    border-left: 4px solid #000000;
+    border-top: 4px solid #000000; 
+    cursor: nwse-resize; 
+}
+.resize-handle[data-corner="ne"] { 
+    right: -2px; 
+    top: -2px; 
+    border-right: 4px solid #000000;
+    border-top: 4px solid #000000; 
+    cursor: nesw-resize; 
+}
+.resize-handle[data-corner="sw"] { 
+    left: -2px; 
+    bottom: -2px; 
+    border-left: 4px solid #000000;
+    border-bottom: 4px solid #000000; 
+    cursor: nesw-resize; 
+}
+.resize-handle[data-corner="se"] { 
+    right: -2px; 
+    bottom: -2px; 
+    border-right: 4px solid #000000;
+    border-bottom: 4px solid #000000; 
+    cursor: nwse-resize; 
+}
