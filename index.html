@@ -33,7 +33,12 @@
       <div style="position:relative; display:inline-block;">
         <img id="imgA" alt="Image A preview" hidden/>
         <div id="cropBox"
-             style="position:absolute; border:2px dashed #00f; background:rgba(0,0,255,0.1); cursor:move; display:none;"></div>
+            style="position:absolute; border:2px dashed #00f; background:rgba(0,0,255,0.1); cursor:move; display:none;">
+          <div class="resize-handle" data-corner="nw"></div>
+          <div class="resize-handle" data-corner="ne"></div>
+          <div class="resize-handle" data-corner="sw"></div>
+          <div class="resize-handle" data-corner="se"></div>
+        </div>
       </div>
       <canvas id="canvasA" hidden></canvas>
       <div id="statsA" class="mono muted"></div>
@@ -236,7 +241,22 @@
       // Return a promise that resolves when the image is loaded
       return new Promise((res, rej) => {
         const r = new FileReader(); // FileReader to read the file
-        r.onload = () => { imgEl.onload = () => res(); imgEl.onerror = rej; imgEl.src = r.result; }; // onload handler
+        r.onload = () => {
+          imgEl.onload = () => {
+            imgEl.hidden = false; // show image element
+            // Crop box initialization
+            const imgRect = imgEl.getBoundingClientRect(); // get image A bounding rect 
+            
+            cropBox.style.display = 'block'; // show crop box
+            cropBox.style.left = '0px'; // align to left
+            cropBox.style.top = '0px'; // align to top
+            cropBox.style.width = imgRect.width + 'px'; // image width
+            cropBox.style.height = imgRect.height + 'px'; // image height
+            res(); 
+          };
+          imgEl.onerror = rej;
+          imgEl.src = r.result;
+        };
         r.onerror = rej; // onerror handler
         r.readAsDataURL(file); // read file as data URL
       });
@@ -290,41 +310,109 @@
     // ------------------------------------------------
 
     // ________________________________________________
-    // CROP BOX DRAGGING
-    
-    // Define drag behavior for crop box
+    // CROP BOX DRAGGING AND RESIZING
+
     const cropBox = document.getElementById('cropBox');
-    let isDragging = false, startX, startY, startLeft, startTop;
+    let isDragging = false, isResizing = false, resizeCorner = null;
+    let startX, startY, startLeft, startTop, startW, startH;
 
-    // Mouse down on crop box to start dragging
-    // -----------------------------------------------
+    // Mouse down on crop box to start dragging (only if not on a handle)
     cropBox.addEventListener('mousedown', (e) => {
-      isDragging = true; // set dragging flag
-      startX = e.clientX; // record start X
-      startY = e.clientY; // record start Y
-      startLeft = parseInt(cropBox.style.left, 10); // record start left position
-      startTop = parseInt(cropBox.style.top, 10); // record start top position
-      e.preventDefault(); // prevent default behavior
+      // Only start dragging if not clicking a resize handle
+      if (e.target.classList.contains('resize-handle')) return;
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = parseInt(cropBox.style.left, 10);
+      startTop = parseInt(cropBox.style.top, 10);
+      e.preventDefault();
     });
 
-    // Mouse move to drag crop box
-    // -----------------------------------------------
+    // Mouse down on resize handles to start resizing
+    document.querySelectorAll('.resize-handle').forEach(handle => {
+      handle.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        resizeCorner = handle.dataset.corner;
+        startX = e.clientX;
+        startY = e.clientY;
+        startW = parseInt(cropBox.style.width, 10);
+        startH = parseInt(cropBox.style.height, 10);
+        startLeft = parseInt(cropBox.style.left, 10);
+        startTop = parseInt(cropBox.style.top, 10);
+        e.stopPropagation();
+        e.preventDefault();
+      });
+    });
+
+    // Mouse move to drag or resize crop box
     document.addEventListener('mousemove', (e) => {
-      if (!isDragging) return; // if not dragging, exit
-      const dx = e.clientX - startX; // calculate delta X
-      const dy = e.clientY - startY; // calculate delta Y
-      cropBox.style.left = `${startLeft + dx}px`; // update left position
-      cropBox.style.top = `${startTop + dy}px`; // update top position
+      // Get image A bounding rect for clamping
+      const imgRect = imgA.getBoundingClientRect();
+      // Handle dragging
+      if (isDragging) {
+        let dx = e.clientX - startX; // delta x
+        let dy = e.clientY - startY; // delta y
+        let newLeft = startLeft + dx; // new left position
+        let newTop = startTop + dy; // new top position
+
+        // Clamp left/top so crop box stays within image
+        newLeft = Math.max(0, Math.min(newLeft, imgRect.width - parseInt(cropBox.style.width, 10)));
+        newTop = Math.max(0, Math.min(newTop, imgRect.height - parseInt(cropBox.style.height, 10)));
+
+        cropBox.style.left = `${newLeft}px`; // update left
+        cropBox.style.top = `${newTop}px`; // update top
+
+      // Handle resizing
+      } else if (isResizing) {
+        let dx = e.clientX - startX; // delta x
+        let dy = e.clientY - startY; // delta y
+        // Initialize new position and size variables
+        let left = startLeft, top = startTop, width = startW, height = startH;
+
+        // Adjust for northwest corner
+        if (resizeCorner === 'nw') {
+          left = startLeft + dx; // new left position
+          top = startTop + dy; // new top position
+          width = startW - dx; // new width
+          height = startH - dy; // new height
+        // Adjust for northeast corner
+        } else if (resizeCorner === 'ne') {
+          top = startTop + dy; // new top position
+          width = startW + dx; // new width
+          height = startH - dy; // new height
+        // Adjust for southwest corner
+        } else if (resizeCorner === 'sw') {
+          left = startLeft + dx; // new left position
+          width = startW - dx; // new width
+          height = startH + dy; // new height
+        // Adjust for southeast corner
+        } else if (resizeCorner === 'se') {
+          width = startW + dx; // new width
+          height = startH + dy; // new height
+        }
+
+        // Clamp values so crop box stays within image
+        left = Math.max(0, Math.min(left, imgRect.width - 10));
+        top = Math.max(0, Math.min(top, imgRect.height - 10));
+        width = Math.max(10, Math.min(width, imgRect.width - left));
+        height = Math.max(10, Math.min(height, imgRect.height - top));
+
+        cropBox.style.left = `${left}px`; // update left
+        cropBox.style.top = `${top}px`; // update top
+        cropBox.style.width = `${width}px`; // update width
+        cropBox.style.height = `${height}px`; // update height
+      }
     });
 
-    // Mouse up to stop dragging
-    // -----------------------------------------------
+    // Mouse up to stop dragging or resizing
     document.addEventListener('mouseup', () => {
-      isDragging = false; // clear dragging flag
+      isDragging = false;
+      isResizing = false;
+      resizeCorner = null;
     });
-    
-    // END CROP BOX DRAGGING
+
     // ________________________________________________
+    // END CROP BOX DRAGGING AND RESIZING
     
     // Enable frame input and button when video is loaded
     fileVideo.addEventListener('change', () => {
@@ -373,17 +461,9 @@
       try { // try to load image
         await loadImg(f, imgA); // load image into imgA element
         imgAReady = true; // set imgAReady flag
-        imgA.hidden = false; // show imgA element
         detectResult = null; // reset previous detection result
         statsA.textContent = ''; // clear stats
         canvasA.hidden = true; // hide canvasA
-
-        // Show crop box
-        cropBox.style.display = 'block';
-        cropBox.style.left = '50px';
-        cropBox.style.top = '50px';
-        cropBox.style.width = '100px';
-        cropBox.style.height = '100px';
 
       } catch (e) {
         console.error('Image A preview error', e);
