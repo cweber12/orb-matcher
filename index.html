@@ -141,7 +141,7 @@
     const __tmpCtx = __tmpCanvas.getContext('2d', { willReadFrequently: true });
 
     // Convert an HTMLImageElement to cv.Mat (CV_8UC4)
-    // -----------------------------------------------
+    // ______________________________________________________
     function matFromImageEl(imgEl) {
       // Get image dimensions, use natural size if available
       const w = imgEl.naturalWidth || imgEl.width;
@@ -160,7 +160,7 @@
     }
 
     // Crop an image element to a specified rectangle 
-    // -----------------------------------------------
+    // ______________________________________________________
     // cropRect: { x, y, width, height }
     function cropImage(imgEl, cropRect) {
       // Create a canvas to hold the cropped image
@@ -181,7 +181,7 @@
    
     // Compatible imshow function: uses cv.imshow if available, 
     // otherwise converts Mat to ImageData and draws to canvas
-    // -----------------------------------------------
+    // ______________________________________________________
     function imshowCompat(canvas, mat) {
       if (window.cv.imshow) { // if the build supports imshow
         window.cv.imshow(canvas, mat); // use it directly
@@ -226,7 +226,7 @@
     }
     
     // Refresh button enabled/disabled states 
-    // ------------------------------------------------
+    // ______________________________________________________
     function refreshButtons() {
       // Log current states for debugging
       console.log('refreshButtons', { cvReady, imgAReady, imgBReady, haveFeatures: haveFeatures(), detectResult });
@@ -236,7 +236,7 @@
     }
 
     // Load an image file into an HTMLImageElement
-    // ------------------------------------------------
+    // ______________________________________________________
     function loadImg(file, imgEl) {
       // Return a promise that resolves when the image is loaded
       return new Promise((res, rej) => {
@@ -263,25 +263,25 @@
     }
 
     // Get crop rectangle relative to image A
-    // ------------------------------------------------
+    // ______________________________________________________
     function getCropRect() {
       const imgRect = imgA.getBoundingClientRect(); // get image A bounding rect
       const cropRect = cropBox.getBoundingClientRect(); // get crop box bounding rect
-      // calculate crop rectangle relative to image A
-      return {
-        x: cropRect.left - imgRect.left, // relative x position
-        y: cropRect.top - imgRect.top, // relative y position
-        width: cropRect.width, // relative width
-        height: cropRect.height // relative height
+
+      // Calculate scale factors
+      const scaleX = imgA.naturalWidth / imgRect.width;
+      const scaleY = imgA.naturalHeight / imgRect.height;
+
+      return { // return crop rectangle in image coordinates
+        x: Math.round((cropRect.left - imgRect.left) * scaleX),
+        y: Math.round((cropRect.top - imgRect.top) * scaleY),
+        width: Math.round(cropRect.width * scaleX),
+        height: Math.round(cropRect.height * scaleY)
       };
     }
 
-    // ------------------------------------------------
-    //           INITIALIZATION
-    // ------------------------------------------------
-
     // Initialize ORBModule when OpenCV.js is ready
-    // ------------------------------------------------
+    // ______________________________________________________
     function onCvReady() {
       // Create ORBModule instance
       try {
@@ -509,26 +509,46 @@
       if (!cvReady || !imgAReady) return;
       const cv = window.cv;
       // const src = cv.imread(imgA);
-      const src = matFromImageEl(imgA); 
+      const cropRect = getCropRect();
+      // Crop image A according to crop box
+      const croppedCanvas = cropImage(imgA, cropRect);
+      // Convert cropped image to Mat
+      const src = matFromImageEl(croppedCanvas);
+      // Set ORB options
       const opts = { 
         nfeatures: Number(nfeatures.value) || 1200,
         edgeThreshold: Number(edgeThreshold.value) || 31
       };
+      // Run detection
       try {
+        // Perform ORB detection
         detectResult = mod.detectORB(src, opts);
+        // Offset keypoints to match their position on the full image
+        const offsetKeypoints = detectResult.keypoints.map(kp => ({
+          ...kp,
+          x: kp.x + cropRect.x,
+          y: kp.y + cropRect.y
+        }));
+        // Update stats display
         statsA.textContent =
           `A: ${detectResult.width}x${detectResult.height}\n` +
           `keypoints: ${detectResult.keypoints.length}\n` +
           `descriptors: ${detectResult.descriptors?.rows ?? 0} x ${detectResult.descriptors?.cols ?? 0}`;
-        canvasA.hidden = false;
-        mod.drawKeypoints(src, detectResult.keypoints, canvasA);
-      } catch (e) {
+        // show canvasA (image with keypoints)
+        canvasA.hidden = false; 
+        
+        // Draw keypoints on the full image
+        const fullMat = matFromImageEl(imgA);
+        mod.drawKeypoints(fullMat, offsetKeypoints, canvasA);
+        fullMat.delete(); // clean up full image Mat
+      
+      } catch (e) { // catch errors
         console.error('Detect error', e);
         alert('Detect failed. See console.');
         detectResult = null;
-      } finally {
-        src.delete();
-        refreshButtons();
+      } finally { // cleanup
+        src.delete(); // release Mat
+        refreshButtons(); // refresh buttons
       }
     });
 
