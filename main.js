@@ -18,15 +18,18 @@ const btnDetect = el('btnDetect'), btnDownload = el('btnDownload'), btnMatch = e
 const statsA = el('statsA'), statsB = el('statsB');
 const nfeatures = el('nfeatures'), ratio = el('ratio'), ransac = el('ransac'), edgeThreshold = el('edgeThreshold');
 const canvasMatches = el('canvasMatches');
+
 // Video frame extractor elements
 const fileVideo = el('fileVideo');
 const frameNumber = el('frameNumber');
 const btnExtractFrame = el('btnExtractFrame');
 const videoPreview = el('videoPreview');
 const canvasFrame = el('canvasFrame');
+const frameImage = new Image();
 
+// Crop box elements
 const cropBox = document.getElementById('cropBox');
-const cropBoxB = document.getElementById('cropBoxB'); // Add this for image B
+const cropBoxB = document.getElementById('cropBoxB'); 
 
 setupCropBox(imgA, cropBox);
 setupCropBox(imgB, cropBoxB);
@@ -42,6 +45,7 @@ let imgAReady = false;
 let imgBReady = false;
 let detectResult = null;
 let loadedJSON = null;
+
 // Video frame extractor state
 let videoExtractor;
 
@@ -196,26 +200,41 @@ btnExtractFrame.addEventListener('click', async () => {
     const frameIdx = Number(frameNumber.value) || 0;
     const fps = 25; // Can make this user configurable later
     try {
-    await videoExtractor.extractFrame(frameIdx, fps);
-    // Use the canvas directly for ORB detection
-    const srcMat = matFromImageEl(canvasFrame);
+        await videoExtractor.extractFrame(frameIdx, fps);
 
-    // Run ORB detection
-    detectResult = mod.detectORB(srcMat, { nfeatures: Number(nfeatures.value) || 1200 });
-    statsA.textContent =
-        `A: ${detectResult.width}x${detectResult.height}\n` +
-        `keypoints: ${detectResult.keypoints.length}\n` +
-        `descriptors: ${detectResult.descriptors?.rows ?? 0} x ${detectResult.descriptors?.cols ?? 0}`;
-    canvasA.hidden = false;
-    mod.drawKeypoints(srcMat, detectResult.keypoints, canvasA);
-    srcMat.delete();
-    imgAReady = true;
-    videoPreview.hidden = true;
-    refreshButtons();
+        // Convert the extracted frame (canvasFrame) to an image and set as imgA
+        imgA.src = canvasFrame.toDataURL();
+        imgA.onload = () => {
+            imgA.hidden = false;
+
+            // Get the rendered size of the image
+            const imgRect = imgA.getBoundingClientRect();
+
+            // Set parent container size to match image
+            const parent = imgA.parentElement;
+            parent.style.width = imgRect.width + 'px';
+            parent.style.height = imgRect.height + 'px';
+
+            // Show and initialize the crop box
+            cropBox.style.display = 'block';
+            cropBox.hidden = false;
+            cropBox.style.left = '0px';
+            cropBox.style.top = '0px';
+            cropBox.style.width = imgRect.width + 'px';
+            cropBox.style.height = imgRect.height + 'px';
+
+            imgAReady = true;
+            videoPreview.hidden = true;
+            detectResult = null;
+            statsA.textContent = '';
+            canvasA.hidden = true;
+            canvasFrame.hidden = true;
+            refreshButtons();
+        };
     } catch (e) {
-    alert('Frame extraction failed: ' + e);
-    imgAReady = false;
-    refreshButtons();
+        alert('Frame extraction failed: ' + e);
+        imgAReady = false;
+        refreshButtons();
     }
 });
 

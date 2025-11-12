@@ -9,7 +9,7 @@
 </head>
 <body>
   <h1 class="title">ORB Feature Tool</h1>
-  <p style="color:white; margin-top:0;">
+  <p style="color:white; margin:0;">
     Detects ORB (Oriented FAST and Rotated BRIEF) features in uploaded image or video frame A 
     and matches them to image B.
   </p>
@@ -21,33 +21,39 @@
   <div class="grid">
     <!-- Upload image A, detect ORB features and export features.json -->
     <div class="card">
-      <h2>Upload Image A and Extract ORB features</h2>
-      <p>Upload image, detect features & export <code>features.json</code></p>
       <div class="row">
-        <input id="fileA" type="file" accept="image/*" />
-        <button id="btnDetect" disabled>Detect ORB</button>
-        <button id="btnDownload" disabled>Download features.json</button>
+        <div class="column"> 
+          <h2>Upload Image A</h2>
+          <div class="row">
+            <input id="fileA" type="file" accept="image/*" />
+          </div>
+        </div>
+        <!-- Extract video frame, pass to ORB detection -->
+        <div class="column">
+          <h2>Extract Video Frame</h2>
+          <div class="row">
+            <input id="fileVideo" type="file" accept="video/*" />
+            <input id="frameNumber" type="number" min="0" value="0" style="width:80px" disabled />
+            <button id="btnExtractFrame" disabled>Extract Frame</button>
+          </div>
+        </div>
       </div>
-      <!-- Extract video frame, pass to ORB detection -->
-      <h2>Extract Video Frame</h2>
-      <p>Upload a video file, specify frame number, and extract frame for ORB detection.</p>
-      <div class="row">
-        <input id="fileVideo" type="file" accept="video/*" />
-        <input id="frameNumber" type="number" min="0" value="0" style="width:80px" disabled />
-        <button id="btnExtractFrame" disabled>Extract Frame</button>
-      </div>
-      <video id="videoPreview" hidden controls style="max-width:100%;"></video>
-      <canvas id="canvasFrame" hidden></canvas>
+      <h2>Extract and Export ORB Features</h2>
       <div class="row muted">
         nfeatures <input id="nfeatures" type="number" value="1200" min="100" max="5000" style="width:90px">
         edgeThreshold <input id="edgeThreshold" type="number" value="31" min="1" max="100" style="width:90px">
         ratio <input id="ratio" type="number" step="0.01" value="0.75" style="width:80px">
-        RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:90px">
-        
+        RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:90px">       
       </div>
+      <div class="row">
+        <button id="btnDetect" disabled>Detect ORB</button>
+        <button id="btnDownload" disabled>Download features.json</button>
+      </div>
+      <video id="videoPreview" hidden controls style="max-width:100%;"></video>
+      <canvas id="canvasFrame" hidden></canvas>
       <div style="position:relative; display:inline-block;">
         <img id="imgA" alt="Image A preview" hidden/>
-        <div id="cropBox" class="crop-box" hidden>
+        <div id="cropBox" class="crop-box" style="position:absolute;" hidden>
           <div class="resize-handle" data-corner="nw"></div>
           <div class="resize-handle" data-corner="ne"></div>
           <div class="resize-handle" data-corner="sw"></div>
@@ -60,25 +66,25 @@
 
     <!-- Import JSON + match to Image B -->
     <div class="card">
-      <h2>Match ORB Features to Image B</h2>
-      <p>Upload image B and <code>features.json</code> to find matches.</p>
-      <div class="row">
-        <input id="fileJSON" type="file" accept=".json,application/json" />
-        <input id="fileB" type="file" accept="image/*" />
-      </div>
-      <div class="row">
-        <button id="btnMatch" disabled>Match</button>
+      <div class="column">
+        <h2>Match ORB Features to Image B</h2>
+        <div class="row">
+          <input id="fileJSON" type="file" accept=".json,application/json" />
+          <input id="fileB" type="file" accept="image/*" />
+        </div>
+        <div class="row">
+          <button id="btnMatch" disabled>Match</button>
+        </div>
       </div>
       <div style="position:relative; display:inline-block;">
         <img id="imgB" alt="Image B preview" hidden/>
-        <div id="cropBoxB" class="crop-box" hidden>
+        <div id="cropBoxB" class="crop-box" style="position:absolute;" hidden>
           <div class="resize-handle" data-corner="nw"></div>
           <div class="resize-handle" data-corner="ne"></div>
           <div class="resize-handle" data-corner="sw"></div>
           <div class="resize-handle" data-corner="se"></div>
         </div>
-      </div>
-      
+      </div> 
       <div id="statsB" class="mono muted"></div>
     </div> 
   </div>

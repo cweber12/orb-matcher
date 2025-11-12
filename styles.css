@@ -39,11 +39,14 @@ body {
 }
 
 .card { 
-    border: 1px solid #e5e7eb; 
+    display: flex; 
+    flex-direction: column;
+    justify-content: flex-start; 
+    border: 1px solid #1a2231; 
     border-radius: 4px; 
     padding: 16px;
-    background: white;
-    box-shadow: 0 1px 3px rgba(0,0,0,.04); 
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5); 
 }
 
 h2 { 
@@ -68,8 +71,17 @@ button:disabled {
 .row { 
     display: flex; 
     gap: 8px; align-items: center; 
-    flex-wrap: wrap; 
-    margin: 20px 0; 
+    flex-wrap: wrap;
+    align-items: flex-start;  
+    margin-bottom: 20px;  
+}
+
+.column {
+    display: flex; 
+    flex-direction: column; 
+    justify-content: flex-start; 
+    gap: 8px; 
+    flex: 1; 
 }
 
 .muted { 
