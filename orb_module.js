@@ -173,7 +173,7 @@ matchToTarget(sourceJson, targetMat, opts = {}) {
   }
 
   // Draw matches side-by-side (A|B) with inliers in green, others red
-  drawMatches(imgA, imgB, keypointsA, matchRes) {
+  drawMatches(imgA, imgB, keypointsA, keypointsB, matchRes) {
     const cv = this.cv;
     const outH = Math.max(imgA.rows, imgB.rows);
     const outW = imgA.cols + imgB.cols;
@@ -187,7 +187,7 @@ matchToTarget(sourceJson, targetMat, opts = {}) {
     for (let i = 0; i < matchRes.matches.length; i++) {
       const m = matchRes.matches[i];
       const p1 = keypointsA[m.queryIdx];
-      const p2 = this._lastDetB.keypoints[m.trainIdx];
+      const p2 = keypointsB[m.trainIdx];
       if (!p1 || !p2) continue;
       const inlier = inMask ? Boolean(inMask[i]) : true;
       const color = inlier ? new cv.Scalar(0,255,0,255) : new cv.Scalar(255,0,0,255);

@@ -12,6 +12,10 @@
     Detects ORB (Oriented FAST and Rotated BRIEF) features in uploaded image or video frame A 
     and matches them to image B.
   </p>
+  <!-- Canvas for displaying matches -->
+  <div class="matches">
+    <canvas id="canvasMatches" style="width:100%" hidden></canvas>
+  </div>
   <!-- Main grid containing all cards (img upload, video frame extraction, matching) -->
   <div class="grid">
     <!-- Upload image A, detect ORB features and export features.json -->
@@ -23,29 +27,7 @@
         <button id="btnDetect" disabled>Detect ORB</button>
         <button id="btnDownload" disabled>Download features.json</button>
       </div>
-      <div class="row muted">
-        nfeatures <input id="nfeatures" type="number" value="1200" min="100" max="5000" style="width:90px">
-        edgeThreshold <input id="edgeThreshold" type="number" value="31" min="1" max="100" style="width:90px">
-        ratio <input id="ratio" type="number" step="0.01" value="0.75" style="width:80px">
-        RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:90px">
-        
-      </div>
-      <div style="position:relative; display:inline-block;">
-        <img id="imgA" alt="Image A preview" hidden/>
-        <div id="cropBox"
-            style="position:absolute; border:2px dashed rgb(0, 0, 0); background:rgba(115, 247, 115, 0.1); cursor:move; display:none;">
-          <div class="resize-handle" data-corner="nw"></div>
-          <div class="resize-handle" data-corner="ne"></div>
-          <div class="resize-handle" data-corner="sw"></div>
-          <div class="resize-handle" data-corner="se"></div>
-        </div>
-      </div>
-      <canvas id="canvasA" hidden></canvas>
-      <div id="statsA" class="mono muted"></div>
-    </div>
-
-    <!-- Extract video frame, pass to ORB detection (prev card) -->
-    <div class="card">
+      <!-- Extract video frame, pass to ORB detection -->
       <h2>Extract Video Frame</h2>
       <p>Upload a video file, specify frame number, and extract frame for ORB detection.</p>
       <div class="row">
@@ -55,6 +37,24 @@
       </div>
       <video id="videoPreview" hidden controls style="max-width:100%;"></video>
       <canvas id="canvasFrame" hidden></canvas>
+      <div class="row muted">
+        nfeatures <input id="nfeatures" type="number" value="1200" min="100" max="5000" style="width:90px">
+        edgeThreshold <input id="edgeThreshold" type="number" value="31" min="1" max="100" style="width:90px">
+        ratio <input id="ratio" type="number" step="0.01" value="0.75" style="width:80px">
+        RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:90px">
+        
+      </div>
+      <div style="position:relative; display:inline-block;">
+        <img id="imgA" alt="Image A preview" hidden/>
+        <div id="cropBox" class="crop-box" hidden>
+          <div class="resize-handle" data-corner="nw"></div>
+          <div class="resize-handle" data-corner="ne"></div>
+          <div class="resize-handle" data-corner="sw"></div>
+          <div class="resize-handle" data-corner="se"></div>
+        </div>
+      </div>
+      <canvas id="canvasA" hidden></canvas>
+      <div id="statsA" class="mono muted"></div>
     </div>
 
     <!-- Import JSON + match to Image B -->
@@ -70,21 +70,16 @@
       </div>
       <div style="position:relative; display:inline-block;">
         <img id="imgB" alt="Image B preview" hidden/>
-        <div id="cropBoxB"
-            style="position:absolute; border:2px dashed rgb(0, 0, 0); background:rgba(115, 247, 115, 0.1); cursor:move; display:none;">
+        <div id="cropBoxB" class="crop-box" hidden>
           <div class="resize-handle" data-corner="nw"></div>
           <div class="resize-handle" data-corner="ne"></div>
           <div class="resize-handle" data-corner="sw"></div>
           <div class="resize-handle" data-corner="se"></div>
         </div>
       </div>
-      <canvas id="canvasMatches" style="width:100%" hidden></canvas>
+      
       <div id="statsB" class="mono muted"></div>
-    </div>
-    <div class="card">
-      <canvas id="canvasMatches" style="width:100%" hidden></canvas>
-    </div>
-    
+    </div> 
   </div>
 
   <!-- OpenCV.js setup -->
@@ -160,6 +155,7 @@
 
     // Convert an HTMLImageElement to cv.Mat (CV_8UC4)
     // ______________________________________________________
+
     function matFromImageEl(imgEl) {
       // Get image dimensions, use natural size if available
       const w = imgEl.naturalWidth || imgEl.width;
@@ -179,6 +175,7 @@
 
     // Setup crop box dragging and resizing for an image element
     // ______________________________________________________
+
     function setupCropBox(imgEl, cropBoxEl) {
       let isDragging = false, isResizing = false, resizeCorner = null;
       let startX, startY, startLeft, startTop, startW, startH;
@@ -277,6 +274,7 @@
 
     // Get crop rectangle relative to an image element
     // ______________________________________________________
+
     function getCropRectGeneric(imgEl, cropBoxEl) {
       const imgRect = imgEl.getBoundingClientRect();
       const cropRect = cropBoxEl.getBoundingClientRect();
@@ -292,6 +290,7 @@
 
     // Crop an image element to a specified rectangle 
     // ______________________________________________________
+
     // cropRect: { x, y, width, height }
     function cropImage(imgEl, cropRect) {
       // Create a canvas to hold the cropped image
@@ -313,6 +312,7 @@
     // Compatible imshow function: uses cv.imshow if available, 
     // otherwise converts Mat to ImageData and draws to canvas
     // ______________________________________________________
+
     function imshowCompat(canvas, mat) {
       if (window.cv.imshow) { // if the build supports imshow
         window.cv.imshow(canvas, mat); // use it directly
@@ -358,6 +358,7 @@
     
     // Refresh button enabled/disabled states 
     // ______________________________________________________
+
     function refreshButtons() {
       // Log current states for debugging
       console.log('refreshButtons', { cvReady, imgAReady, imgBReady, haveFeatures: haveFeatures(), detectResult });
@@ -368,6 +369,7 @@
 
     // Load an image file into an HTMLImageElement
     // ______________________________________________________
+
     function loadImg(file, imgEl, cropBox) {
       // Return a promise that resolves when the image is loaded
       return new Promise((res, rej) => {
@@ -394,6 +396,7 @@
 
     // Get crop rectangle relative to image A
     // ______________________________________________________
+
     function getCropRect() {
       const imgRect = imgA.getBoundingClientRect(); // get image A bounding rect
       const cropRect = cropBox.getBoundingClientRect(); // get crop box bounding rect
@@ -412,6 +415,7 @@
 
     // Initialize ORBModule when OpenCV.js is ready
     // ______________________________________________________
+
     function onCvReady() {
       // Create ORBModule instance
       try {
@@ -438,113 +442,10 @@
     // ------------------------------------------------
     //                     EVENTS 
     // ------------------------------------------------
-
-    /*// ________________________________________________
-    // CROP BOX DRAGGING AND RESIZING
-
-    const cropBox = document.getElementById('cropBox');
-    let isDragging = false, isResizing = false, resizeCorner = null;
-    let startX, startY, startLeft, startTop, startW, startH;
-
-    // Mouse down on crop box to start dragging (only if not on a handle)
-    cropBox.addEventListener('mousedown', (e) => {
-      // Only start dragging if not clicking a resize handle
-      if (e.target.classList.contains('resize-handle')) return;
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      startLeft = parseInt(cropBox.style.left, 10);
-      startTop = parseInt(cropBox.style.top, 10);
-      e.preventDefault();
-    });
-
-    // Mouse down on resize handles to start resizing
-    document.querySelectorAll('.resize-handle').forEach(handle => {
-      handle.addEventListener('mousedown', (e) => {
-        isResizing = true;
-        resizeCorner = handle.dataset.corner;
-        startX = e.clientX;
-        startY = e.clientY;
-        startW = parseInt(cropBox.style.width, 10);
-        startH = parseInt(cropBox.style.height, 10);
-        startLeft = parseInt(cropBox.style.left, 10);
-        startTop = parseInt(cropBox.style.top, 10);
-        e.stopPropagation();
-        e.preventDefault();
-      });
-    });
-
-    // Mouse move to drag or resize crop box
-    document.addEventListener('mousemove', (e) => {
-      // Get image A bounding rect for clamping
-      const imgRect = imgA.getBoundingClientRect();
-      // Handle dragging
-      if (isDragging) {
-        let dx = e.clientX - startX; // delta x
-        let dy = e.clientY - startY; // delta y
-        let newLeft = startLeft + dx; // new left position
-        let newTop = startTop + dy; // new top position
-
-        // Clamp left/top so crop box stays within image
-        newLeft = Math.max(0, Math.min(newLeft, imgRect.width - parseInt(cropBox.style.width, 10)));
-        newTop = Math.max(0, Math.min(newTop, imgRect.height - parseInt(cropBox.style.height, 10)));
-
-        cropBox.style.left = `${newLeft}px`; // update left
-        cropBox.style.top = `${newTop}px`; // update top
-
-      // Handle resizing
-      } else if (isResizing) {
-        let dx = e.clientX - startX; // delta x
-        let dy = e.clientY - startY; // delta y
-        // Initialize new position and size variables
-        let left = startLeft, top = startTop, width = startW, height = startH;
-
-        // Adjust for northwest corner
-        if (resizeCorner === 'nw') {
-          left = startLeft + dx; // new left position
-          top = startTop + dy; // new top position
-          width = startW - dx; // new width
-          height = startH - dy; // new height
-        // Adjust for northeast corner
-        } else if (resizeCorner === 'ne') {
-          top = startTop + dy; // new top position
-          width = startW + dx; // new width
-          height = startH - dy; // new height
-        // Adjust for southwest corner
-        } else if (resizeCorner === 'sw') {
-          left = startLeft + dx; // new left position
-          width = startW - dx; // new width
-          height = startH + dy; // new height
-        // Adjust for southeast corner
-        } else if (resizeCorner === 'se') {
-          width = startW + dx; // new width
-          height = startH + dy; // new height
-        }
-
-        // Clamp values so crop box stays within image
-        left = Math.max(0, Math.min(left, imgRect.width - 10));
-        top = Math.max(0, Math.min(top, imgRect.height - 10));
-        width = Math.max(10, Math.min(width, imgRect.width - left));
-        height = Math.max(10, Math.min(height, imgRect.height - top));
-
-        cropBox.style.left = `${left}px`; // update left
-        cropBox.style.top = `${top}px`; // update top
-        cropBox.style.width = `${width}px`; // update width
-        cropBox.style.height = `${height}px`; // update height
-      }
-    });
-
-    // Mouse up to stop dragging or resizing
-    document.addEventListener('mouseup', () => {
-      isDragging = false;
-      isResizing = false;
-      resizeCorner = null;
-    });
-
+      
+    // Video frame extraction
     // ________________________________________________
-    // END CROP BOX DRAGGING AND RESIZING*/
-    
-    // Enable frame input and button when video is loaded
+
     fileVideo.addEventListener('change', () => {
       const f = fileVideo.files?.[0];
       if (!f) return;
@@ -558,6 +459,8 @@
     });
 
     // Extract frame button
+    // ________________________________________________
+
     btnExtractFrame.addEventListener('click', async () => {
       const frameIdx = Number(frameNumber.value) || 0;
       const fps = 25; // Can make this user configurable later
@@ -576,6 +479,7 @@
         mod.drawKeypoints(srcMat, detectResult.keypoints, canvasA);
         srcMat.delete();
         imgAReady = true;
+        videoPreview.hidden = true;
         refreshButtons();
       } catch (e) {
         alert('Frame extraction failed: ' + e);
@@ -585,12 +489,16 @@
     });
 
     // Image A load
+    // ________________________________________________
+
     fileA.addEventListener('change', async () => {
       const f = fileA.files?.[0]; // get selected file
       if (!f) return; // if no file, exit
       try { // try to load image
         await loadImg(f, imgA, cropBox); // load image into imgA element
         imgAReady = true; // set imgAReady flag
+        imgA.hidden = false; // show imgA
+        cropBox.hidden = false; // show crop box
         detectResult = null; // reset previous detection result
         statsA.textContent = ''; // clear stats
         canvasA.hidden = true; // hide canvasA
@@ -603,6 +511,8 @@
     });
 
     // Image B load
+    // ________________________________________________
+
     fileB.addEventListener('change', async () => {
       const f = fileB.files?.[0];
       if (!f) return;
@@ -610,6 +520,7 @@
         await loadImg(f, imgB, cropBoxB);
         imgBReady = true;
         imgB.hidden = false;
+        cropBoxB.hidden = false;
         statsB.textContent = '';
         canvasMatches.hidden = true;
       } catch (e) {
@@ -621,6 +532,8 @@
     });
 
     // JSON load
+    // ________________________________________________
+
     fileJSON.addEventListener('change', async () => {
       const f = fileJSON.files?.[0];
       if (!f) return;
@@ -634,6 +547,8 @@
     });
 
     // Detect ORB
+    // ________________________________________________
+
     btnDetect.addEventListener('click', () => {
       if (!cvReady || !imgAReady) return;
       const cv = window.cv;
@@ -682,6 +597,8 @@
     });
 
     // Download JSON
+    // ________________________________________________
+
     btnDownload.addEventListener('click', () => {
       if (!detectResult) return;
       const json = mod.exportJSON(detectResult);
@@ -693,33 +610,81 @@
       URL.revokeObjectURL(a.href);
     });
 
-    // Match
+    // Match features.json to Image B
+    // ________________________________________________
+
     btnMatch.addEventListener('click', () => {
-      if (!cvReady || !imgBReady) return;
-      if (!loadedJSON && !detectResult) { alert('Load features.json or run Detect on Image A first.'); return; }
+      if (!cvReady || !imgBReady) return; // If not ready, exit
+      if (!loadedJSON && !detectResult) { // No features available
+        alert('Load features.json or run Detect on Image A first.');
+        return;
+      }
+      // Get OpenCV.js reference
       const cv = window.cv;
-      // const target = cv.imread(imgB);
-      const target = matFromImageEl(imgB); // short term fix for imread issues
+
+      // Crop and process image B
+      const cropRectB = getCropRectGeneric(imgB, cropBoxB);
+      const croppedCanvasB = cropImage(imgB, cropRectB);
+      const target = matFromImageEl(croppedCanvasB);
+
+      // Detect ORB features on cropped image B and offset keypoints
+      // Options for ORB detection
+      const opts = {
+        nfeatures: Number(nfeatures.value) || 1200,
+        edgeThreshold: Number(edgeThreshold.value) || 31
+      };
+      // Detect features on image B
+      const detectResultB = mod.detectORB(target, opts);
+      // Offset keypoints to match their position on the full image B
+      const offsetKeypointsB = detectResultB.keypoints.map(kp => ({
+        ...kp,
+        x: kp.x + cropRectB.x,
+        y: kp.y + cropRectB.y
+      }));
+
+      // Prepare source features from loaded JSON or detected result
       const source = loadedJSON || mod.exportJSON(detectResult);
+      const cropRectA = getCropRect();
+      const offsetKeypointsA = source.keypoints.map(kp => ({
+        ...kp,
+        x: kp.x + cropRectA.x,
+        y: kp.y + cropRectA.y
+      }));
+
       try {
-        const res = mod.matchToTarget(source, target, {
-          useKnn: true,
-          ratio: Number(ratio.value) || 0.75,
-          ransacReprojThreshold: Number(ransac.value) || 3.0
-        });
+        // Match features
+        const res = mod.matchToTarget(
+          { ...source, keypoints: offsetKeypointsA },
+          target,
+          {
+            useKnn: true,
+            ratio: Number(ratio.value) || 0.75,
+            ransacReprojThreshold: Number(ransac.value) || 3.0
+          }
+        );
+
         statsB.textContent =
           `B: ${target.cols}x${target.rows}\n` +
           `matches: ${res.matches.length}\n` +
           `inliers: ${res.numInliers ?? 0}\n` +
           (res.homography ? `H: [${res.homography.map(v => v.toFixed(3)).join(', ')}]` : 'H: (none)');
-        // const A = cv.imread(imgA);
-        const A = matFromImageEl(imgA); // short term fix for imread issues
-        mod.drawMatches(A, target, source.keypoints, res);
-        // cv.imshow(canvasMatches, mod._lastCanvasMat);
-        imshowCompat(canvasMatches, mod._lastCanvasMat); // custom imshow
+
+        if (!Array.isArray(offsetKeypointsA) || !Array.isArray(offsetKeypointsB) || !Array.isArray(res.matches)) {
+          alert('No keypoints or matches found. Check your crop area and images.');
+          return;
+        }
+        
+        // Draw matches on full images using offset keypoints
+        const A = matFromImageEl(imgA);
+        const B = matFromImageEl(imgB);
+        
+        mod.drawMatches(A, B, offsetKeypointsA, offsetKeypointsB, res);
+        imshowCompat(canvasMatches, mod._lastCanvasMat);
+
         fileB.hidden = true;
         canvasMatches.hidden = false;
         A.delete();
+        B.delete();
         mod._releaseLastCanvasMat();
       } catch (e) {
         console.error('Match error', e);
