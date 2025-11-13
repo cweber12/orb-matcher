@@ -76,10 +76,16 @@ button:disabled {
     margin-bottom: 20px;  
 }
 
+.params {
+    justify-content: space-between; 
+    margin-bottom: 8px; 
+}
+
 .column {
     display: flex; 
     flex-direction: column; 
-    justify-content: flex-start; 
+    justify-content: flex-start;
+    height: fit-content; 
     gap: 8px; 
     flex: 1; 
 }
@@ -97,8 +103,10 @@ button:disabled {
 
 canvas, img, video { 
     max-width: 100%; 
+    height: auto;
     border-radius: 4px; 
-    border: 1px solid #e5e7eb; 
+    border: 1px solid #2d2d2d; 
+    box-shadow: 2px 2px 6px rgba(0,0,0,0.5);
 }
 
 .mono { 
@@ -119,6 +127,7 @@ canvas, img, video {
     top: -2px; 
     border-left: 4px solid #000000;
     border-top: 4px solid #000000; 
+    border-radius: 4px; 
     cursor: nwse-resize; 
 }
 .resize-handle[data-corner="ne"] { 
@@ -126,6 +135,7 @@ canvas, img, video {
     top: -2px; 
     border-right: 4px solid #000000;
     border-top: 4px solid #000000; 
+    border-radius: 4px;
     cursor: nesw-resize; 
 }
 .resize-handle[data-corner="sw"] { 
@@ -133,6 +143,7 @@ canvas, img, video {
     bottom: -2px; 
     border-left: 4px solid #000000;
     border-bottom: 4px solid #000000; 
+    border-radius: 4px;
     cursor: nesw-resize; 
 }
 .resize-handle[data-corner="se"] { 
@@ -140,6 +151,7 @@ canvas, img, video {
     bottom: -2px; 
     border-right: 4px solid #000000;
     border-bottom: 4px solid #000000; 
+    border-radius: 4px;
     cursor: nwse-resize; 
 }
 

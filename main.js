@@ -10,15 +10,27 @@ import { loadImg, matFromImageEl, cropImage } from './image_utils.js?v=20251104'
 //                   ELEMENTS 
 // ------------------------------------------------
 
-// ORB feature tool elements
+// Helper to get element by ID
 const el = (id) => document.getElementById(id);
+// Main elements
 const fileA = el('fileA'), imgA = el('imgA'), canvasA = el('canvasA');
 const fileJSON = el('fileJSON'), fileB = el('fileB'), imgB = el('imgB');
-const btnDetect = el('btnDetect'), btnDownload = el('btnDownload'), btnMatch = el('btnMatch');
-const statsA = el('statsA'), statsB = el('statsB');
-const nfeatures = el('nfeatures'), ratio = el('ratio'), ransac = el('ransac'), edgeThreshold = el('edgeThreshold');
 const canvasMatches = el('canvasMatches');
-
+// Action buttons
+const btnDetect = el('btnDetect');
+const btnDownload = el('btnDownload');
+const btnMatch = el('btnMatch');
+// Stats display elements
+const statsA = el('statsA'), statsB = el('statsB');
+// ORB parameters elements
+const nfeatures = el('nfeatures');
+const ratio = el('ratio');
+const ransac = el('ransac'); 
+const edgeThreshold = el('edgeThreshold');
+const scaleFactor = el('scaleFactor');
+const nlevels = el('nlevels');
+const fastThreshold = el('fastThreshold');
+const patchSize = el('patchSize');
 // Video frame extractor elements
 const fileVideo = el('fileVideo');
 const frameNumber = el('frameNumber');
@@ -311,7 +323,11 @@ btnDetect.addEventListener('click', () => {
     // Set ORB options
     const opts = { 
     nfeatures: Number(nfeatures.value) || 1200,
-    edgeThreshold: Number(edgeThreshold.value) || 31
+    edgeThreshold: Number(edgeThreshold.value) || 31,
+    scaleFactor: Number(scaleFactor.value) || 1.2,
+    nlevels: Number(nlevels.value) || 8,
+    fastThreshold: Number(fastThreshold.value) || 20,
+    patchSize: Number(patchSize.value) || 31,
     };
     // Run detection
     try {
@@ -330,7 +346,8 @@ btnDetect.addEventListener('click', () => {
         `descriptors: ${detectResult.descriptors?.rows ?? 0} x ${detectResult.descriptors?.cols ?? 0}`;
     // show canvasA (image with keypoints)
     canvasA.hidden = false; 
-    
+    imgA.hidden = true; // hide original imageA
+    cropBox.style.display = 'none'; // hide crop box when showing keypoints
     // Draw keypoints on the full image
     const fullMat = matFromImageEl(imgA);
     mod.drawKeypoints(fullMat, offsetKeypoints, canvasA);
@@ -381,7 +398,11 @@ btnMatch.addEventListener('click', () => {
     // Options for ORB detection
     const opts = {
     nfeatures: Number(nfeatures.value) || 1200,
-    edgeThreshold: Number(edgeThreshold.value) || 31
+    edgeThreshold: Number(edgeThreshold.value) || 31,
+    scaleFactor: Number(scaleFactor.value) || 1.2,
+    nlevels: Number(nlevels.value) || 8,
+    fastThreshold: Number(fastThreshold.value) || 20,
+    patchSize: Number(patchSize.value) || 31
     };
     // Detect features on image B
     const detectResultB = mod.detectORB(target, opts);

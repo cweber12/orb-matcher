@@ -38,17 +38,7 @@
           </div>
         </div>
       </div>
-      <h2>Extract and Export ORB Features</h2>
-      <div class="row muted">
-        nfeatures <input id="nfeatures" type="number" value="1200" min="100" max="5000" style="width:90px">
-        edgeThreshold <input id="edgeThreshold" type="number" value="31" min="1" max="100" style="width:90px">
-        ratio <input id="ratio" type="number" step="0.01" value="0.75" style="width:80px">
-        RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:90px">       
-      </div>
-      <div class="row">
-        <button id="btnDetect" disabled>Detect ORB</button>
-        <button id="btnDownload" disabled>Download features.json</button>
-      </div>
+      <!-- Display video and extracted frame -->
       <video id="videoPreview" hidden controls style="max-width:100%;"></video>
       <canvas id="canvasFrame" hidden></canvas>
       <div style="position:relative; display:inline-block;">
@@ -60,6 +50,40 @@
           <div class="resize-handle" data-corner="se"></div>
         </div>
       </div>
+      <!-- ORB parameters and action buttons -->
+      <h2>Extract and Export ORB Features</h2>
+      <div class="column muted" style="width:fit-content; margin:16px 0px;">
+        <div class="row params">
+          nfeatures <input id="nfeatures" type="number" value="1200" min="100" max="5000" style="width:60px">
+        </div>
+        <div class="row params">
+          nlevels <input id="nlevels" type="number" value="8" min="1" max="20" style="width:60px">
+        </div>
+        <div class="row params">
+          scaleFactor <input id="scaleFactor" type="number" step="0.1" value="1.2" style="width:60px">
+        </div>
+        <div class="row params">
+          edgeThreshold <input id="edgeThreshold" type="number" value="31" min="1" max="100" style="width:60px">
+        </div>
+        <div class="row params">
+          fastThreshold <input id="fastThreshold" type="number" value="20" min="1" max="100" style="width:60px">
+        </div>
+        <div class="row params">
+          ratio <input id="ratio" type="number" step="0.01" value="0.75" style="width:60px">
+        </div>
+        <div class="row params">
+          RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:60px">       
+        </div>
+        <div class="row params">
+          patchSize <input id="patchSize" type="number" value="31" min="1" max="100" style="width:60px">
+        </div>
+
+      </div>
+      <div class="row">
+        <button id="btnDetect" disabled>Detect ORB</button>
+        <button id="btnDownload" disabled>Download features.json</button>
+      </div>
+      <!-- Canvas for displaying keypoints on Image A -->
       <canvas id="canvasA" hidden></canvas>
       <div id="statsA" class="mono muted"></div>
     </div>
@@ -71,10 +95,8 @@
         <div class="row">
           <input id="fileJSON" type="file" accept=".json,application/json" />
           <input id="fileB" type="file" accept="image/*" />
-        </div>
-        <div class="row">
           <button id="btnMatch" disabled>Match</button>
-        </div>
+        </div>  
       </div>
       <div style="position:relative; display:inline-block;">
         <img id="imgB" alt="Image B preview" hidden/>
