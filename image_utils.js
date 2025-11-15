@@ -8,15 +8,15 @@ export function loadImg(file, imgEl, cropBox) {
     const r = new FileReader(); // FileReader to read the file
     r.onload = () => {
         imgEl.onload = () => {
-        imgEl.hidden = false; // show image element
-        // Crop box initialization
-        const imgRect = imgEl.getBoundingClientRect(); // get image A bounding rect 
-        cropBox.style.display = 'block'; // show crop box
-        cropBox.style.left = '0px'; // align to left
-        cropBox.style.top = '0px'; // align to top
-        cropBox.style.width = imgRect.width + 'px'; // image width
-        cropBox.style.height = imgRect.height + 'px'; // image height
-        res(); 
+            imgEl.hidden = false; // show image element
+            // Crop box initialization
+            const imgRect = imgEl.getBoundingClientRect(); // get image A bounding rect 
+            cropBox.style.display = 'block'; // show crop box
+            cropBox.style.left = '0px'; // align to left
+            cropBox.style.top = '0px'; // align to top
+            cropBox.style.width = imgRect.width + 'px'; // image width
+            cropBox.style.height = imgRect.height + 'px'; // image height
+            res(); 
         };
         imgEl.onerror = rej;
         imgEl.src = r.result;

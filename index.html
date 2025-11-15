@@ -17,12 +17,12 @@
   <div class="matches">
     <canvas id="canvasMatches" style="width:100%" hidden></canvas>
   </div>
-  <!-- Main grid containing all cards (img upload, video frame extraction, matching) -->
-  <div class="grid">
+  <!-- Main container with all cards -->
+  <div class="main">
     <!-- Upload image A, detect ORB features and export features.json -->
     <div class="card">
       <div class="row">
-        <div class="column"> 
+        <div class="column" > 
           <h2>Upload Image A</h2>
           <div class="row">
             <input id="fileA" type="file" accept="image/*" />
@@ -33,59 +33,63 @@
           <h2>Extract Video Frame</h2>
           <div class="row">
             <input id="fileVideo" type="file" accept="video/*" />
-            <input id="frameNumber" type="number" min="0" value="0" style="width:80px" disabled />
-            <button id="btnExtractFrame" disabled>Extract Frame</button>
           </div>
         </div>
       </div>
       <!-- Display video and extracted frame -->
       <video id="videoPreview" hidden controls style="max-width:100%;"></video>
       <canvas id="canvasFrame" hidden></canvas>
-      <div style="position:relative; display:inline-block;">
-        <img id="imgA" alt="Image A preview" hidden/>
-        <div id="cropBox" class="crop-box" style="position:absolute;" hidden>
-          <div class="resize-handle" data-corner="nw"></div>
-          <div class="resize-handle" data-corner="ne"></div>
-          <div class="resize-handle" data-corner="sw"></div>
-          <div class="resize-handle" data-corner="se"></div>
-        </div>
+      <div class="row" style="width:100%; align-items:center; justify-content:center; margin:24px">
+        <button id="btnExtractFrame" hidden>Extract Frame</button>
+        <input id="frameNumber" type="number" min="0" value="0" style="width:80px" hidden />
       </div>
       <!-- ORB parameters and action buttons -->
-      <h2>Extract and Export ORB Features</h2>
-      <div class="column muted" style="width:fit-content; margin:16px 0px;">
-        <div class="row params">
-          nfeatures <input id="nfeatures" type="number" value="1200" min="100" max="5000" style="width:60px">
+      <div id="detectOrb" hidden>
+        <h2>Extract and Export ORB Features</h2>
+        <div class="row" style="width:100%; align-items:center; gap:24px; justify-content:space-between;">
+          <div class="column muted params">
+            <div class="row param">
+              nfeatures <input id="nfeatures" type="number" value="1200" min="100" max="5000">
+            </div>
+            <div class="row param">
+              nlevels <input id="nlevels" type="number" value="8" min="1" max="20">
+            </div>
+            <div class="row param">
+              scaleFactor <input id="scaleFactor" type="number" step="0.1" value="1.2">
+            </div>
+            <div class="row param">
+              edgeThres <input id="edgeThreshold" type="number" value="31" min="1" max="100">
+            </div>
+            <div class="row param">
+              fastThresh <input id="fastThreshold" type="number" value="20" min="1" max="100">
+            </div>
+            <div class="row param">
+              ratio <input id="ratio" type="number" step="0.01" value="0.75">
+            </div>
+            <div class="row param">
+              RANSACthresh <input id="ransac" type="number" step="0.1" value="3.0">       
+            </div>
+            <div class="row param">
+              patchSize <input id="patchSize" type="number" value="31" min="1" max="100">
+            </div>
+          </div>
+          <div style="position:relative; display:inline-block; max-width:65%;">
+            <img id="imgA" alt="Image A preview" hidden/>
+            <div id="cropBox" class="crop-box" style="position:absolute;" hidden>
+              <div class="resize-handle" data-corner="nw"></div>
+              <div class="resize-handle" data-corner="ne"></div>
+              <div class="resize-handle" data-corner="sw"></div>
+              <div class="resize-handle" data-corner="se"></div>
+            </div>
+            <canvas id="canvasA" style="max-width:100%;" hidden></canvas>
+            <div id="statsA" class="mono muted"></div>
+          </div>
         </div>
-        <div class="row params">
-          nlevels <input id="nlevels" type="number" value="8" min="1" max="20" style="width:60px">
+        <div class="row">
+          <button id="btnDetect" disabled>Detect ORB</button>
+          <button id="btnDownload" disabled>Download features.json</button>
         </div>
-        <div class="row params">
-          scaleFactor <input id="scaleFactor" type="number" step="0.1" value="1.2" style="width:60px">
-        </div>
-        <div class="row params">
-          edgeThreshold <input id="edgeThreshold" type="number" value="31" min="1" max="100" style="width:60px">
-        </div>
-        <div class="row params">
-          fastThreshold <input id="fastThreshold" type="number" value="20" min="1" max="100" style="width:60px">
-        </div>
-        <div class="row params">
-          ratio <input id="ratio" type="number" step="0.01" value="0.75" style="width:60px">
-        </div>
-        <div class="row params">
-          RANSAC thresh <input id="ransac" type="number" step="0.1" value="3.0" style="width:60px">       
-        </div>
-        <div class="row params">
-          patchSize <input id="patchSize" type="number" value="31" min="1" max="100" style="width:60px">
-        </div>
-
       </div>
-      <div class="row">
-        <button id="btnDetect" disabled>Detect ORB</button>
-        <button id="btnDownload" disabled>Download features.json</button>
-      </div>
-      <!-- Canvas for displaying keypoints on Image A -->
-      <canvas id="canvasA" hidden></canvas>
-      <div id="statsA" class="mono muted"></div>
     </div>
 
     <!-- Import JSON + match to Image B -->

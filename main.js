@@ -38,6 +38,8 @@ const btnExtractFrame = el('btnExtractFrame');
 const videoPreview = el('videoPreview');
 const canvasFrame = el('canvasFrame');
 const frameImage = new Image();
+// ORB detection section element
+const detectOrb = el('detectOrb');
 
 // Crop box elements
 const cropBox = document.getElementById('cropBox');
@@ -92,7 +94,6 @@ function imshowCompat(canvas, mat) {
     window.cv.imshow(canvas, mat); // use it directly
     return;
     }
-    
     let rgba = mat; // placeholder for RGBA Mat
     
     /* 
@@ -105,13 +106,11 @@ function imshowCompat(canvas, mat) {
     if (mat.type() === window.cv.CV_8UC3) {
     rgba = new window.cv.Mat(); // Create an empty Mat for the result
     window.cv.cvtColor(mat, rgba, window.cv.COLOR_RGB2RGBA); // Convert RGB to RGBA
-
     // If the Mat is not already in 4-channel RGBA format (CV_8UC4), convert it.
     } else if (mat.type() !== window.cv.CV_8UC4) {
     const tmp = new window.cv.Mat(); // Temporary Mat for conversion
     window.cv.cvtColor(mat, tmp, window.cv.COLOR_RGBA2RGBA); // Convert to RGBA
-    rgba = tmp; // Use the converted Mat
-    
+    rgba = tmp; // Use the converted Mat   
     // If the Mat is already in RGBA format, clone it to avoid modifying the original.
     } else {
     rgba = mat.clone();
@@ -200,8 +199,8 @@ fileVideo.addEventListener('change', () => {
     videoPreview.src = url;
     videoPreview.load();
     videoPreview.hidden = false;
-    frameNumber.disabled = false;
-    btnExtractFrame.disabled = false;
+    frameNumber.hidden = false;
+    btnExtractFrame.hidden = false;
     videoExtractor = new VideoFrameExtractor(videoPreview, canvasFrame);
 });
 
@@ -218,10 +217,8 @@ btnExtractFrame.addEventListener('click', async () => {
         imgA.src = canvasFrame.toDataURL();
         imgA.onload = () => {
             imgA.hidden = false;
-
             // Get the rendered size of the image
             const imgRect = imgA.getBoundingClientRect();
-
             // Set parent container size to match image
             const parent = imgA.parentElement;
             parent.style.width = imgRect.width + 'px';
@@ -237,6 +234,8 @@ btnExtractFrame.addEventListener('click', async () => {
 
             imgAReady = true;
             videoPreview.hidden = true;
+            frameNumber.hidden = true;
+            btnExtractFrame.hidden = true;
             detectResult = null;
             statsA.textContent = '';
             canvasA.hidden = true;
@@ -256,18 +255,36 @@ btnExtractFrame.addEventListener('click', async () => {
 fileA.addEventListener('change', async () => {
     const f = fileA.files?.[0]; // get selected file
     if (!f) return; // if no file, exit
-    try { // try to load image
-    await loadImg(f, imgA, cropBox); // load image into imgA element
-    imgAReady = true; // set imgAReady flag
-    imgA.hidden = false; // show imgA
-    cropBox.hidden = false; // show crop box
-    detectResult = null; // reset previous detection result
-    statsA.textContent = ''; // clear stats
-    canvasA.hidden = true; // hide canvasA
+    try {
+        // Load image into imgA and initialize crop box after image is rendered
+        await loadImg(f, imgA, cropBox);
+
+        // Ensure imgA and cropBox are visible before sizing
+        imgA.hidden = false;
+        cropBox.hidden = false;
+        detectOrb.hidden = false; // show ORB detection section
+
+        // Get the rendered size of the image
+        const imgRect = imgA.getBoundingClientRect();
+        const parent = imgA.parentElement;
+        parent.style.width = imgRect.width + 'px';
+        parent.style.height = imgRect.height + 'px';
+
+        // Initialize crop box to cover the whole image
+        cropBox.style.display = 'block';
+        cropBox.style.left = '0px';
+        cropBox.style.top = '0px';
+        cropBox.style.width = imgRect.width + 'px';
+        cropBox.style.height = imgRect.height + 'px';
+
+        imgAReady = true; // set imgAReady flag
+        detectResult = null; // reset previous detection result
+        statsA.textContent = ''; // clear stats
+        canvasA.hidden = true; // hide canvasA
     } catch (e) {
-    console.error('Image A preview error', e);
-    imgAReady = false;
-    imgA.hidden = true;
+        console.error('Image A preview error', e);
+        imgAReady = false;
+        imgA.hidden = true;
     }
     refreshButtons();
 });
@@ -408,18 +425,18 @@ btnMatch.addEventListener('click', () => {
     const detectResultB = mod.detectORB(target, opts);
     // Offset keypoints to match their position on the full image B
     const offsetKeypointsB = detectResultB.keypoints.map(kp => ({
-    ...kp,
-    x: kp.x + cropRectB.x,
-    y: kp.y + cropRectB.y
+        ...kp,
+        x: kp.x + cropRectB.x,
+        y: kp.y + cropRectB.y
     }));
 
     // Prepare source features from loaded JSON or detected result
     const source = loadedJSON || mod.exportJSON(detectResult);
-    const cropRectA = getCropRect();
+    const cropRectA = getCropRectGeneric(imgA, cropBox);
     const offsetKeypointsA = source.keypoints.map(kp => ({
-    ...kp,
-    x: kp.x + cropRectA.x,
-    y: kp.y + cropRectA.y
+        ...kp,
+        x: kp.x + cropRectA.x,
+        y: kp.y + cropRectA.y
     }));
 
     try {
