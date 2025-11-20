@@ -174,12 +174,14 @@ matchToTarget(sourceJson, targetMat, opts = {}) {
 
   // Draw matches side-by-side (A|B) with inliers in green, others red
   drawMatches(imgA, imgB, keypointsA, keypointsB, matchRes) {
-    const cv = this.cv;
-    const outH = Math.max(imgA.rows, imgB.rows);
-    const outW = imgA.cols + imgB.cols;
-    this._releaseLastCanvasMat();
+    const cv = this.cv; // OpenCV.js
+    const outH = Math.max(imgA.rows, imgB.rows); // Output height
+    const outW = imgA.cols + imgB.cols; // Output width
+    this._releaseLastCanvasMat(); // Release previous if any
+    // Create new output Mat
     this._lastCanvasMat = new cv.Mat(outH, outW, cv.CV_8UC4, new cv.Scalar(0,0,0,255));
 
+    // Copy images side by side
     const roiA = this._lastCanvasMat.roi(new cv.Rect(0, 0, imgA.cols, imgA.rows)); imgA.copyTo(roiA); roiA.delete();
     const roiB = this._lastCanvasMat.roi(new cv.Rect(imgA.cols, 0, imgB.cols, imgB.rows)); imgB.copyTo(roiB); roiB.delete();
 

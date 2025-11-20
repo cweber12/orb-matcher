@@ -6,10 +6,8 @@ import { VideoFrameExtractor } from './video_frame_extractor.js?v=20251104';
 import { setupCropBox } from './setup_crop_box.js?v=20251104';
 import { loadImg, matFromImageEl, cropImage } from './image_utils.js?v=20251104';
 
+// ELEMENTS 
 // ------------------------------------------------
-//                   ELEMENTS 
-// ------------------------------------------------
-
 // Helper to get element by ID
 const el = (id) => document.getElementById(id);
 // Main elements
@@ -48,10 +46,6 @@ const cropBoxB = document.getElementById('cropBoxB');
 setupCropBox(imgA, cropBox);
 setupCropBox(imgB, cropBoxB);
 
-// ------------------------------------------------
-//                     STATE 
-// ------------------------------------------------
-
 // ORB feature tool state
 let mod;
 let cvReady = false;
@@ -63,15 +57,12 @@ let loadedJSON = null;
 // Video frame extractor state
 let videoExtractor;
 
+// Check if features available (from detection or loaded JSON)
 const haveFeatures = () => Boolean(loadedJSON || detectResult);
 
+// HELPERS 
 // ------------------------------------------------
-//                     HELPERS 
-// ------------------------------------------------
-
 // Get crop rectangle relative to an image element
-// ______________________________________________________
-
 function getCropRectGeneric(imgEl, cropBoxEl) {
     const imgRect = imgEl.getBoundingClientRect();
     const cropRect = cropBoxEl.getBoundingClientRect();
@@ -87,8 +78,6 @@ function getCropRectGeneric(imgEl, cropBoxEl) {
 
 // Compatible imshow function: uses cv.imshow if available, 
 // otherwise converts Mat to ImageData and draws to canvas
-// ______________________________________________________
-
 function imshowCompat(canvas, mat) {
     if (window.cv.imshow) { // if the build supports imshow
     window.cv.imshow(canvas, mat); // use it directly
@@ -130,8 +119,6 @@ function imshowCompat(canvas, mat) {
 }
 
 // Refresh button enabled/disabled states 
-// ______________________________________________________
-
 function refreshButtons() {
     // Log current states for debugging
     console.log('refreshButtons', { cvReady, imgAReady, imgBReady, haveFeatures: haveFeatures(), detectResult });
@@ -141,8 +128,6 @@ function refreshButtons() {
 }
 
 // Get crop rectangle relative to image A
-// ______________________________________________________
-
 function getCropRect() {
     const imgRect = imgA.getBoundingClientRect(); // get image A bounding rect
     const cropRect = cropBox.getBoundingClientRect(); // get crop box bounding rect
@@ -160,8 +145,6 @@ function getCropRect() {
 }
 
 // Initialize ORBModule when OpenCV.js is ready
-// ______________________________________________________
-
 function onCvReady() {
     // Create ORBModule instance
     try {
@@ -185,13 +168,10 @@ if (window.cvIsReady || (window.cv && (window.cv.Mat || window.cv.getBuildInform
     document.addEventListener('cv-ready', onCvReady, { once: true });
 }
 
-// ------------------------------------------------
-//                     EVENTS 
-// ------------------------------------------------
-    
-// Video frame extraction
-// ________________________________________________
 
+// EVENTS 
+// ------------------------------------------------    
+// Video frame extraction
 fileVideo.addEventListener('change', () => {
     const f = fileVideo.files?.[0];
     if (!f) return;
@@ -205,8 +185,6 @@ fileVideo.addEventListener('change', () => {
 });
 
 // Extract frame button
-// ________________________________________________
-
 btnExtractFrame.addEventListener('click', async () => {
     const frameIdx = Number(frameNumber.value) || 0;
     const fps = 25; // Can make this user configurable later
@@ -250,8 +228,6 @@ btnExtractFrame.addEventListener('click', async () => {
 });
 
 // Image A load
-// ________________________________________________
-
 fileA.addEventListener('change', async () => {
     const f = fileA.files?.[0]; // get selected file
     if (!f) return; // if no file, exit
@@ -290,8 +266,6 @@ fileA.addEventListener('change', async () => {
 });
 
 // Image B load
-// ________________________________________________
-
 fileB.addEventListener('change', async () => {
     const f = fileB.files?.[0];
     if (!f) return;
@@ -311,8 +285,6 @@ fileB.addEventListener('change', async () => {
 });
 
 // JSON load
-// ________________________________________________
-
 fileJSON.addEventListener('change', async () => {
     const f = fileJSON.files?.[0];
     if (!f) return;
@@ -326,8 +298,6 @@ fileJSON.addEventListener('change', async () => {
 });
 
 // Detect ORB
-// ________________________________________________
-
 btnDetect.addEventListener('click', () => {
     if (!cvReady || !imgAReady) return;
     const cv = window.cv;
@@ -381,8 +351,6 @@ btnDetect.addEventListener('click', () => {
 });
 
 // Download JSON
-// ________________________________________________
-
 btnDownload.addEventListener('click', () => {
     if (!detectResult) return;
     const json = mod.exportJSON(detectResult);
@@ -395,13 +363,11 @@ btnDownload.addEventListener('click', () => {
 });
 
 // Match features.json to Image B
-// ________________________________________________
-
 btnMatch.addEventListener('click', () => {
     if (!cvReady || !imgBReady) return; // If not ready, exit
     if (!loadedJSON && !detectResult) { // No features available
-    alert('Load features.json or run Detect on Image A first.');
-    return;
+        alert('Load features.json or run Detect on Image A first.');
+        return;
     }
     // Get OpenCV.js reference
     const cv = window.cv;
@@ -414,12 +380,12 @@ btnMatch.addEventListener('click', () => {
     // Detect ORB features on cropped image B and offset keypoints
     // Options for ORB detection
     const opts = {
-    nfeatures: Number(nfeatures.value) || 1200,
-    edgeThreshold: Number(edgeThreshold.value) || 31,
-    scaleFactor: Number(scaleFactor.value) || 1.2,
-    nlevels: Number(nlevels.value) || 8,
-    fastThreshold: Number(fastThreshold.value) || 20,
-    patchSize: Number(patchSize.value) || 31
+        nfeatures: Number(nfeatures.value) || 1200,
+        edgeThreshold: Number(edgeThreshold.value) || 31,
+        scaleFactor: Number(scaleFactor.value) || 1.2,
+        nlevels: Number(nlevels.value) || 8,
+        fastThreshold: Number(fastThreshold.value) || 20,
+        patchSize: Number(patchSize.value) || 31
     };
     // Detect features on image B
     const detectResultB = mod.detectORB(target, opts);
@@ -432,13 +398,7 @@ btnMatch.addEventListener('click', () => {
 
     // Prepare source features from loaded JSON or detected result
     const source = loadedJSON || mod.exportJSON(detectResult);
-    const cropRectA = getCropRectGeneric(imgA, cropBox);
-    const offsetKeypointsA = source.keypoints.map(kp => ({
-        ...kp,
-        x: kp.x + cropRectA.x,
-        y: kp.y + cropRectA.y
-    }));
-
+    const offsetKeypointsA = source.keypoints; 
     try {
     // Match features
     const res = mod.matchToTarget(
@@ -461,6 +421,7 @@ btnMatch.addEventListener('click', () => {
         alert('No keypoints or matches found. Check your crop area and images.');
         return;
     }
+    
     
     // Draw matches on full images using offset keypoints
     const A = matFromImageEl(imgA);
