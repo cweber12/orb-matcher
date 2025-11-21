@@ -24,20 +24,6 @@
             <input id="fileA" type="file" accept="image/*" />
           </div>
         </div>
-        <!-- Extract video frame, pass to ORB detection -->
-        <div class="column">
-          <h2>Extract Video Frame</h2>
-          <div class="row">
-            <input id="fileVideo" type="file" accept="video/*" />
-          </div>
-        </div>
-      </div>
-      <!-- Display video and extracted frame -->
-      <video id="videoPreview" hidden controls style="max-width:100%;"></video>
-      <canvas id="canvasFrame" hidden></canvas>
-      <div class="row" style="width:100%; align-items:center; justify-content:center; margin:24px">
-        <button id="btnExtractFrame" hidden>Extract Frame</button>
-        <input id="frameNumber" type="number" min="0" value="0" style="width:80px" hidden />
       </div>
       <!-- ORB parameters and action buttons -->
       <div id="detectOrb" hidden>
