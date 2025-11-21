@@ -253,8 +253,6 @@ matchToTarget(sourceJson, targetMat, opts = {}) {
   return { matches: good, homography: H, numInliers: inliers, inlierMask };
 }
 
-
-
   // Draw keypoints on canvas
   drawKeypoints(imgRGBA, keypoints, outCanvas) {
     const cv = this.cv; // OpenCV.js

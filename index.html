@@ -5,7 +5,6 @@
   <title>ORB Feature Tool</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="./styles.css" />
-  <script type="module" src="./main.js"></script>
 </head>
 <body>
   <h1 class="title">ORB Feature Tool</h1>
@@ -18,15 +17,17 @@
     <!-- Upload image A, detect ORB features and export features.json -->
     <div class="card">
       <div class="row">
-        <div class="column" > 
+        <div class="column"> 
           <h2>Upload Image A</h2>
           <div class="row">
             <input id="fileA" type="file" accept="image/*" />
           </div>
         </div>
+        <button id="btnDetect" disabled>Detect ORB</button>
+        <button id="btnDownload" disabled>Download features.json</button>
       </div>
       <!-- ORB parameters and action buttons -->
-      <div id="detectOrb" hidden>
+      <div id="detectOrb">
         <h2>Extract and Export ORB Features</h2>
         <div class="row" style="width:100%; align-items:center; gap:24px; justify-content:space-between;">
           <div class="column muted params">
@@ -46,12 +47,6 @@
               fastThresh <input id="fastThreshold" type="number" value="20" min="1" max="100">
             </div>
             <div class="row param">
-              ratio <input id="ratio" type="number" step="0.01" value="0.75">
-            </div>
-            <div class="row param">
-              RANSACthresh <input id="ransac" type="number" step="0.1" value="3.0">       
-            </div>
-            <div class="row param">
               patchSize <input id="patchSize" type="number" value="31" min="1" max="100">
             </div>
           </div>
@@ -67,10 +62,6 @@
             <div id="statsA" class="mono muted"></div>
           </div>
         </div>
-        <div class="row">
-          <button id="btnDetect" disabled>Detect ORB</button>
-          <button id="btnDownload" disabled>Download features.json</button>
-        </div>
       </div>
     </div>
 
@@ -84,18 +75,32 @@
           <button id="btnMatch" disabled>Match</button>
         </div>  
       </div>
-      <div style="position:relative; display:inline-block;">
-        <img id="imgB" alt="Image B preview" hidden/>
-        <canvas id="canvasMatches" style="width:100%" hidden></canvas>
-        <div id="cropBoxB" class="crop-box" style="position:absolute;" hidden>
-          <div class="resize-handle" data-corner="nw"></div>
-          <div class="resize-handle" data-corner="ne"></div>
-          <div class="resize-handle" data-corner="sw"></div>
-          <div class="resize-handle" data-corner="se"></div>
+      <div class="row" style="width:100%; align-items:center; gap:24px; justify-content:space-between;">
+        <div id="matchParams" style="width: 30%;" hidden>
+          <div  class="column muted params">
+            <div class="row param">
+              ratio <input id="ratio" type="number" step="0.01" value="0.75">
+            </div>
+            <div class="row param">
+              RANSACthresh <input id="ransac" type="number" step="0.1" value="3.0">       
+            </div>
+          </div>
         </div>
+        <div style="position:relative; display:inline-block;">
+          <img id="imgB" alt="Image B preview" hidden/>
+          <canvas id="canvasMatches" style="width:100%" hidden></canvas>
+          <div id="statsB" class="mono muted"></div>
+          <div id="cropBoxB" class="crop-box" style="position:absolute;" hidden>
+            <div class="resize-handle" data-corner="nw"></div>
+            <div class="resize-handle" data-corner="ne"></div>
+            <div class="resize-handle" data-corner="sw"></div>
+            <div class="resize-handle" data-corner="se"></div>
+          </div>
+          
+        </div>
+        
+        
       </div>
-       
-      <div id="statsB" class="mono muted"></div>
     </div> 
   </div>
 
@@ -114,6 +119,7 @@
     };
   </script>
   <script src="./opencv/opencv.js"></script>
+  <script type="module" src="./main.js"></script>
 
 </body>
 </html>

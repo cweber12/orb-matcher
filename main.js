@@ -46,6 +46,7 @@ const scaleFactor = el('scaleFactor');          // Scale factor for ORB
 const nlevels = el('nlevels');                  // Number of levels in the pyramid
 const fastThreshold = el('fastThreshold');      // FAST threshold for ORB
 const patchSize = el('patchSize');              // Patch size for ORB
+const matchParams = el('matchParams');          // Match parameters container
 
 // ORB detection section element
 const detectOrb = el('detectOrb');
@@ -266,6 +267,7 @@ fileB.addEventListener('change', async () => {
     cropBoxB.hidden = false;
     statsB.textContent = '';
     canvasMatches.hidden = true;
+    matchParams.hidden = false;
     } catch (e) {
     console.error('Image B preview error', e);
     imgBReady = false;
