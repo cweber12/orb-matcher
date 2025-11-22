@@ -65,8 +65,8 @@ export function setupCropBox(imgEl, cropBoxEl) {
             width = startW + dx;
             height = startH + dy;
           }
-          left = Math.max(0, Math.min(left, imgRect.width - 10));
-          top = Math.max(0, Math.min(top, imgRect.height - 10));
+          left = Math.max(0, Math.min(left, imgRect.width - width));
+          top = Math.max(0, Math.min(top, imgRect.height - height));
           width = Math.max(10, Math.min(width, imgRect.width - left));
           height = Math.max(10, Math.min(height, imgRect.height - top));
           cropBoxEl.style.left = `${left}px`;

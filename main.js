@@ -69,6 +69,7 @@ let imgAReady = false;      // Image A readiness flag
 let imgBReady = false;      // Image B readiness flag
 let detectResult = null;    // Detection result state
 let loadedJSON = null;      // Loaded JSON state
+let detectJSON = null;      // Detected features JSON state
 
 // Check if features available (from detection or loaded JSON)
 const haveFeatures = () => Boolean(loadedJSON || detectResult);
@@ -84,12 +85,21 @@ function getCropRectGeneric(imgEl, cropBoxEl) {
     const cropRect = cropBoxEl.getBoundingClientRect();
     const scaleX = imgEl.naturalWidth / imgRect.width;
     const scaleY = imgEl.naturalHeight / imgRect.height;
-    return {
-    x: Math.round((cropRect.left - imgRect.left) * scaleX),
-    y: Math.round((cropRect.top - imgRect.top) * scaleY),
-    width: Math.round(cropRect.width * scaleX),
-    height: Math.round(cropRect.height * scaleY)
+    
+    const result = {
+        x: Math.round((cropRect.left - imgRect.left) * scaleX),
+        y: Math.round((cropRect.top - imgRect.top) * scaleY),
+        width: Math.round(cropRect.width * scaleX),
+        height: Math.round(cropRect.height * scaleY)
     };
+    
+    // DEBUG
+    console.log('getCropRectGeneric:', {
+        imgRect, cropRect, scaleX, scaleY, result
+    });
+
+    return result;
+       
 }
 
 // Draws a Mat on a canvas using cv.imshow if available, 
@@ -309,59 +319,90 @@ fileJSON.addEventListener('change', async () => {
 btnDetect.addEventListener('click', () => {
     if (!cvReady || !imgAReady) return;
     const cv = window.cv;
-    // const src = cv.imread(imgA);
-    const cropRect = getCropRect();
+
+    const cropRect = getCropRectGeneric(imgA, cropBox);
+    
     // Crop image A according to crop box
     const croppedCanvas = cropImage(imgA, cropRect);
-    // Convert cropped image to Mat
     const src = matFromImageEl(croppedCanvas);
+
     // Set ORB options
     const opts = { 
-    nfeatures: Number(nfeatures.value) || 1200,
-    edgeThreshold: Number(edgeThreshold.value) || 31,
-    scaleFactor: Number(scaleFactor.value) || 1.2,
-    nlevels: Number(nlevels.value) || 8,
-    fastThreshold: Number(fastThreshold.value) || 20,
-    patchSize: Number(patchSize.value) || 31,
+        nfeatures: Number(nfeatures.value) || 1200,
+        edgeThreshold: Number(edgeThreshold.value) || 31,
+        scaleFactor: Number(scaleFactor.value) || 1.2,
+        nlevels: Number(nlevels.value) || 8,
+        fastThreshold: Number(fastThreshold.value) || 20,
+        patchSize: Number(patchSize.value) || 31,
     };
     // Run detection
     try {
-    // Perform ORB detection
-    detectResult = mod.detectORB(src, opts);
-    // Offset keypoints to match their position on the full image
-    const offsetKeypoints = detectResult.keypoints.map(kp => ({
+        // Perform ORB detection
+        detectResult = mod.detectORB(src, opts);
+        
+        const fullW = imgA.naturalWidth || imgA.width;
+        const fullH = imgA.naturalHeight || imgA.height;
+
+        const keypointsFullPx = detectResult.keypoints.map(kp => ({
         ...kp,
         x: kp.x + cropRect.x,
-        y: kp.y + cropRect.y
-    }));
-    // Update stats display
-    statsA.textContent =
-        `A: ${detectResult.width}x${detectResult.height}\n` +
-        `keypoints: ${detectResult.keypoints.length}\n` +
-        `descriptors: ${detectResult.descriptors?.rows ?? 0} x ${detectResult.descriptors?.cols ?? 0}`;
-    // show canvasA (image with keypoints)
-    canvasA.hidden = false; 
-    imgA.hidden = true; // hide original imageA
-    cropBox.style.display = 'none'; // hide crop box when showing keypoints
-    // Draw keypoints on the full image
-    const fullMat = matFromImageEl(imgA);
-    mod.drawKeypoints(fullMat, offsetKeypoints, canvasA);
-    fullMat.delete(); // clean up full image Mat
+        y: kp.y + cropRect.y,
+        }))
+
+        /* Offset keypoints to match their position on the full image
+        const offsetKeypoints = detectResult.keypoints.map(kp => ({
+            ...kp,
+            x: kp.x + cropRect.x,
+            y: kp.y + cropRect.y
+        }));*/
+
+        // Start from the module's standard JSON (descriptors + normalized to CROPPED size)
+        const baseJson = mod.exportJSON(detectResult);
+
+        // Build JSON normalized to the FULL image size instead
+        detectJSON = {
+        ...baseJson,
+        imageSize: { width: fullW, height: fullH },
+        keypoints: keypointsFullPx.map(kp => ({
+            ...kp,
+            x: kp.x / fullW,
+            y: kp.y / fullH,
+        })),
+        };
+        // NOTE: descriptors stay exactly as baseJson.descriptors (with data_b64)
+        
+        // Update stats display
+        statsA.textContent =
+            `A: ${detectResult.width}x${detectResult.height}\n` +
+            `keypoints: ${detectResult.keypoints.length}\n` +
+            `descriptors: ${detectResult.descriptors?.rows ?? 0} x ${detectResult.descriptors?.cols ?? 0}`;
+        
+            // show canvasA (image with keypoints)
+        canvasA.hidden = false; 
+        imgA.hidden = true; // hide original imageA
+        cropBox.style.display = 'none'; // hide crop box when showing keypoints
+        
+        // Draw keypoints on the full image
+        const fullMat = matFromImageEl(imgA);
+        mod.drawKeypoints(fullMat, keypointsFullPx, canvasA);
+        fullMat.delete(); // clean up full image Mat
     
     } catch (e) { // catch errors
-    console.error('Detect error', e);
-    alert('Detect failed. See console.');
-    detectResult = null;
+        console.error('Detect error', e);
+        alert('Detect failed. See console.');
+        detectResult = null;
+        detectJSON = null;
     } finally { // cleanup
-    src.delete(); // release Mat
-    refreshButtons(); // refresh buttons
+        src.delete(); // release Mat
+        refreshButtons(); // refresh buttons
     }
 });
 
 // Download JSON
 btnDownload.addEventListener('click', () => {
     if (!detectResult) return;
-    const json = mod.exportJSON(detectResult);
+    //const json = mod.exportJSON(detectResult);
+    const json = detectJSON || mod.exportJSON(detectResult);
     const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -405,50 +446,50 @@ btnMatch.addEventListener('click', () => {
     }));
 
     // Prepare source features from loaded JSON or detected result
-    const source = loadedJSON || mod.exportJSON(detectResult);
+    const source = loadedJSON || detectJSON || mod.exportJSON(detectResult);
     const keypointsA = source.keypoints; 
     try {
-    // Match features
-    const res = mod.matchToTarget(
-        { ...source, keypoints: keypointsA },
-        target,
-        {
-        useKnn: true,
-        ratio: Number(ratio.value) || 0.75,
-        ransacReprojThreshold: Number(ransac.value) || 3.0
+        // Match features
+        const res = mod.matchToTarget(
+            { ...source, keypoints: keypointsA },
+            target,
+            {
+            useKnn: true,
+            ratio: Number(ratio.value) || 0.75,
+            ransacReprojThreshold: Number(ransac.value) || 3.0
+            }
+        );
+
+        statsB.textContent =
+            `B: ${target.cols}x${target.rows}\n` +
+            `matches: ${res.matches.length}\n` +
+            `inliers: ${res.numInliers ?? 0}\n` +
+            (res.homography ? `H: [${res.homography.map(v => v.toFixed(3)).join(', ')}]` : 'H: (none)');
+
+        if (!Array.isArray(keypointsA) || !Array.isArray(offsetKeypointsB) || !Array.isArray(res.matches)) {
+            alert('No keypoints or matches found. Check your crop area and images.');
+            return;
         }
-    );
+        
+        
+        // Draw matches on full images using offset keypoints
+        const A = matFromImageEl(imgA);
+        const B = matFromImageEl(imgB);
+        
+        mod.drawMatches(A, B, keypointsA, offsetKeypointsB, res, source.imageSize);
+        imshowCompat(canvasMatches, mod._lastCanvasMat);
 
-    statsB.textContent =
-        `B: ${target.cols}x${target.rows}\n` +
-        `matches: ${res.matches.length}\n` +
-        `inliers: ${res.numInliers ?? 0}\n` +
-        (res.homography ? `H: [${res.homography.map(v => v.toFixed(3)).join(', ')}]` : 'H: (none)');
-
-    if (!Array.isArray(keypointsA) || !Array.isArray(offsetKeypointsB) || !Array.isArray(res.matches)) {
-        alert('No keypoints or matches found. Check your crop area and images.');
-        return;
-    }
-    
-    
-    // Draw matches on full images using offset keypoints
-    const A = matFromImageEl(imgA);
-    const B = matFromImageEl(imgB);
-    
-    mod.drawMatches(A, B, keypointsA, offsetKeypointsB, res, source.imageSize);
-    imshowCompat(canvasMatches, mod._lastCanvasMat);
-
-    imgB.hidden = true;
-    cropBoxB.style.display = 'none';
-    canvasMatches.hidden = false;
-    A.delete();
-    B.delete();
-    mod._releaseLastCanvasMat();
+        imgB.hidden = true;
+        cropBoxB.style.display = 'none';
+        canvasMatches.hidden = false;
+        A.delete();
+        B.delete();
+        mod._releaseLastCanvasMat();
     } catch (e) {
-    console.error('Match error', e);
-    alert('Match failed. See console.');
+        console.error('Match error', e);
+        alert('Match failed. See console.');
     } finally {
-    target.delete();
-    refreshButtons();
+        target.delete();
+        refreshButtons();
     }
 });

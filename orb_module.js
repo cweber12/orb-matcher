@@ -118,140 +118,152 @@ export class ORBModule {
     };
   }
 
-// Match JSON features (Image A) against a target Mat (Image B)
-matchToTarget(sourceJson, targetMat, opts = {}) {
-  
-  // 1. Access OpenCV.js
-  const cv = this.cv; 
-
-  // 2. Set matching parameters (set in UI, else defaults)
-  const ratio = opts.ratio ?? 0.75;
-  const ransacThresh = opts.ransacReprojThreshold ?? 3.0;
-
-  // 3. Validate source JSON descriptors
-  if (!sourceJson?.descriptors?.rows || !sourceJson?.descriptors?.cols) {
-    throw new Error('Invalid features JSON: missing descriptors');
-  }
-
-  // Reconstruct source descriptors Mat
-  const srcU8 = sourceJson.descriptors.data           
-    ? new Uint8Array(sourceJson.descriptors.data)     // from existing data (Uint8Array)
-    : this._b64ToU8(sourceJson.descriptors.data_b64); // or decode from base64
-
-  // 5. Create cv.Mat for source descriptors
-  const srcDesc = cv.matFromArray(
-    sourceJson.descriptors.rows, // number of rows
-    sourceJson.descriptors.cols, // number of columns
-    cv.CV_8U,                    // type (unsigned 8-bit)
-    srcU8                        // data buffer (Uint8Array)
-  );
-
-  // 6. Convert target image to grayscale
-  const gray = new cv.Mat();  // Grayscale Mat
-  cv.cvtColor (               // Convert to grayscale
-    targetMat,                //   - source Mat
-    gray,                     //   - destination Mat
-    cv.COLOR_RGBA2GRAY        //   - color conversion code
-  );
-
-  // 7. Set up ORB detector
-  const orb = new cv.ORB(this._nfeatures || 1200); // ORB detector
-  const tgtKP = new cv.KeyPointVector();           // Target keypoints
-  const tgtDesc = new cv.Mat();                    // Target descriptors
-  const empty = new cv.Mat();                      // Empty mask
-  
-  // 8. Detect and compute on target image
-  orb.detectAndCompute(gray, empty, tgtKP, tgtDesc, false);
-
-  // 9. KNN match (k=2) + ratio test
-  const bf = new cv.BFMatcher(  // Brute-Force matcher
-    cv.NORM_HAMMING,            // Hamming distance
-    false                       // crossCheck disabled        
-  ); 
-  const knn = new cv.DMatchVectorVector();  // Init KNN matches
-  bf.knnMatch(srcDesc, tgtDesc, knn, 2);    // Match descriptors
-
-  // 10. Initialize array for good matches
-  const good = [];
-
-  // 11. Iterate through KNN matches and apply ratio test
-  for (let i = 0; i < knn.size(); i++) {
-    const vec = knn.get(i);   // DMatchVector (needs delete)
-    if (vec.size() >= 2) {    // If at least 2 matches
-      const m = vec.get(0);   //   - first (best) match  
-      const n = vec.get(1);   //   - second match
-                              //   - Apply Lowe's ratio test & store good matches
-      if (m.distance < ratio * n.distance) good.push(m);
-    }
-    vec.delete();
-  }
-  knn.delete();
-
-  // 12. Estimate homography using RANSAC if enough good matches
-  let H = null;                // Homography matrix
-  let inliers = 0;             // Number of inliers
-  let inlierMask = null;       // Inlier mask array
-
-  // Need at least 4 good matches to compute homography
-  if (good.length >= 4) {
+  // Match JSON features (Image A) against a target Mat (Image B)
+  matchToTarget(sourceJson, targetMat, opts = {}) {
     
-    // Prepare array for source points
-    const srcPts = new cv.Mat(
-      good.length,  // number of points
-      1,            // single column
-      cv.CV_32FC2   // type (2-channel float32
-    );
+    // 1. Access OpenCV.js
+    const cv = this.cv; 
 
-    // Prepare array for destination points
-    const dstPts = new cv.Mat(
-      good.length,  // number of points
-      1,            // single column
-      cv.CV_32FC2   // type (2-channel float32
-    );
+    // 2. Set matching parameters (set in UI, else defaults)
+    const ratio = opts.ratio ?? 0.75;
+    const ransacThresh = opts.ransacReprojThreshold ?? 3.0;
 
-    // Fill point arrays based on good matches
-    for (let i = 0; i < good.length; i++) {
-      const m = good[i];
-      const s = sourceJson.keypoints[m.queryIdx];   
-      const t = tgtKP.get(m.trainIdx).pt;           
-      srcPts.data32F[i*2] = s.x; srcPts.data32F[i*2+1] = s.y;
-      dstPts.data32F[i*2] = t.x; dstPts.data32F[i*2+1] = t.y;
+    // 3. Validate source JSON descriptors
+    if (!sourceJson?.descriptors?.rows || !sourceJson?.descriptors?.cols) {
+      throw new Error('Invalid features JSON: missing descriptors');
     }
+
+    // Reconstruct source descriptors Mat
+    const srcU8 = sourceJson.descriptors.data           
+      ? new Uint8Array(sourceJson.descriptors.data)     // from existing data (Uint8Array)
+      : this._b64ToU8(sourceJson.descriptors.data_b64); // or decode from base64
+
+    // 5. Create cv.Mat for source descriptors
+    const srcDesc = cv.matFromArray(
+      sourceJson.descriptors.rows, // number of rows
+      sourceJson.descriptors.cols, // number of columns
+      cv.CV_8U,                    // type (unsigned 8-bit)
+      srcU8                        // data buffer (Uint8Array)
+    );
+
+    // 6. Convert target image to grayscale
+    const gray = new cv.Mat();  // Grayscale Mat
+    cv.cvtColor (               // Convert to grayscale
+      targetMat,                //   - source Mat
+      gray,                     //   - destination Mat
+      cv.COLOR_RGBA2GRAY        //   - color conversion code
+    );
+
+    // 7. Set up ORB detector
+    const orb = new cv.ORB(this._nfeatures || 1200); // ORB detector
+    const tgtKP = new cv.KeyPointVector();           // Target keypoints
+    const tgtDesc = new cv.Mat();                    // Target descriptors
+    const empty = new cv.Mat();                      // Empty mask
     
-    // Prepare mask for inliers
-    const mask = new cv.Mat();
+    // 8. Detect and compute on target image
+    orb.detectAndCompute(gray, empty, tgtKP, tgtDesc, false);
 
-    // Compute homography using RANSAC
-    const Hmat = cv.findHomography(
-      srcPts,         // source points
-      dstPts,         // destination points
-      cv.RANSAC,      // method (RANSAC)
-      ransacThresh,   // RANSAC reprojection threshold
-      mask            // output mask
-    );
-    if (!Hmat.empty()) {
-      H = Array.from(Hmat.data64F ?? Hmat.data32F);
-      inliers = cv.countNonZero(mask);
-      inlierMask = Array.from(mask.data).map(v => v !== 0);
+    // 9. KNN match (k=2) + ratio test
+    const bf = new cv.BFMatcher(  // Brute-Force matcher
+      cv.NORM_HAMMING,            // Hamming distance
+      false                       // crossCheck disabled        
+    ); 
+    const knn = new cv.DMatchVectorVector();  // Init KNN matches
+    bf.knnMatch(srcDesc, tgtDesc, knn, 2);    // Match descriptors
+
+    // 10. Initialize array for good matches
+    const good = [];
+
+    // 11. Iterate through KNN matches and apply ratio test
+    for (let i = 0; i < knn.size(); i++) {
+      const vec = knn.get(i);   // DMatchVector (needs delete)
+      if (vec.size() >= 2) {    // If at least 2 matches
+        const m = vec.get(0);   //   - first (best) match  
+        const n = vec.get(1);   //   - second match
+                                //   - Apply Lowe's ratio test & store good matches
+        if (m.distance < ratio * n.distance) good.push(m);
+      }
+      vec.delete();
     }
-    srcPts.delete(); dstPts.delete(); mask.delete(); Hmat.delete();
+    knn.delete();
+
+    // 12. Estimate homography using RANSAC if enough good matches
+    let H = null;                // Homography matrix
+    let inliers = 0;             // Number of inliers
+    let inlierMask = null;       // Inlier mask array
+
+    // 13. If at least 4 good matches, compute homography
+    if (good.length >= 4) {
+      
+      // Prepare array for source points
+      const srcPts = new cv.Mat(
+        good.length,  // number of points
+        1,            // single column
+        cv.CV_32FC2   // type (2-channel float32
+      );
+
+      // Prepare array for destination points
+      const dstPts = new cv.Mat(
+        good.length,  // number of points
+        1,            // single column
+        cv.CV_32FC2   // type (2-channel float32
+      );
+
+      // Fill point arrays based on good matches
+      const srcW = sourceJson.imageSize?.width  ?? targetMat.cols;
+      const srcH = sourceJson.imageSize?.height ?? targetMat.rows;
+
+      for (let i = 0; i < good.length; i++) {
+        const m = good[i];
+
+        // normalized source keypoint from JSON
+        const sN = sourceJson.keypoints[m.queryIdx];
+        const t  = tgtKP.get(m.trainIdx).pt;
+
+        // de-normalize to pixel coords on source image A
+        const sx = sN.x * srcW;
+        const sy = sN.y * srcH;
+
+        srcPts.data32F[i*2]   = sx;
+        srcPts.data32F[i*2+1] = sy;
+        dstPts.data32F[i*2]   = t.x;
+        dstPts.data32F[i*2+1] = t.y;
+      }
+      
+      // Prepare mask for inliers
+      const mask = new cv.Mat();
+
+      // Compute homography using RANSAC
+      const Hmat = cv.findHomography(
+        srcPts,         // source points
+        dstPts,         // destination points
+        cv.RANSAC,      // method (RANSAC)
+        ransacThresh,   // RANSAC reprojection threshold
+        mask            // output mask
+      );
+      if (!Hmat.empty()) {
+        H = Array.from(Hmat.data64F ?? Hmat.data32F);
+        inliers = cv.countNonZero(mask);
+        inlierMask = Array.from(mask.data).map(v => v !== 0);
+      }
+      srcPts.delete(); dstPts.delete(); mask.delete(); Hmat.delete();
+    }
+
+    // Cache target KPs for drawMatches
+    const tgtKP_JS = this._serializeKeypoints(tgtKP);
+    this._lastDetB = { keypoints: tgtKP_JS };
+
+    // Cleanup
+    gray.delete(); 
+    empty.delete(); 
+    tgtDesc.delete(); 
+    tgtKP.delete(); 
+    orb.delete(); 
+    bf.delete(); 
+    srcDesc.delete();
+
+    return { matches: good, homography: H, numInliers: inliers, inlierMask };
   }
-
-  // Cache target KPs for drawMatches
-  const tgtKP_JS = this._serializeKeypoints(tgtKP);
-  this._lastDetB = { keypoints: tgtKP_JS };
-
-  // Cleanup
-  gray.delete(); 
-  empty.delete(); 
-  tgtDesc.delete(); 
-  tgtKP.delete(); 
-  orb.delete(); 
-  bf.delete(); 
-  srcDesc.delete();
-
-  return { matches: good, homography: H, numInliers: inliers, inlierMask };
-}
 
   // Draw keypoints on canvas
   drawKeypoints(imgRGBA, keypoints, outCanvas) {
@@ -289,7 +301,7 @@ matchToTarget(sourceJson, targetMat, opts = {}) {
   }
 
   // Draw matches side-by-side (A|B) with inliers in green, others red
-  drawMatches(imgA, imgB, keypointsA, keypointsB, matchRes) {
+  drawMatches(imgA, imgB, keypointsA, keypointsB, matchRes, originalSizeA) {
     
     const cv = this.cv;                           // OpenCV.js
     const outH = Math.max(imgA.rows, imgB.rows);  // Output height
@@ -345,9 +357,10 @@ matchToTarget(sourceJson, targetMat, opts = {}) {
       const color = inlier ? new cv.Scalar(0,255,0,255) : new cv.Scalar(255,0,0,255);
 
       // Denormalize keypointsA (from normalized [0,1] to pixel coordinates)
+      // Use originalSizeA for denormalization
       const a = new cv.Point(
-        Math.round(p1.x * imgA.cols), // normalized x to pixel
-        Math.round(p1.y * imgA.rows)  // normalized y to pixel
+        Math.round(p1.x * imgA.cols),
+        Math.round(p1.y * imgA.rows)
       );
 
       // keypointsB are already in pixel coordinates
@@ -364,11 +377,11 @@ matchToTarget(sourceJson, targetMat, opts = {}) {
       (0,0) -----------------------------------------------
             |                  >|                        >|<
             |                >  |                      >  |  <
-            |    imgA.rows -->  |          imgB.rows -->  |  <-- imgRGBA.rows
+            |    imgA.rows -->  |          imgB.rows -->  |  <-- outH
             |                  >|                      >  |  <
             --------------------|                        >|<
             ////////////////////---------------------------
-            {                   imgRGBA.cols              }
+            {                   outW                      }
 
       ---------------------------------------------------------------------- */
 
@@ -399,7 +412,6 @@ matchToTarget(sourceJson, targetMat, opts = {}) {
   _serializeDescriptors(des) {
     if (!des || des.rows===0 || des.cols===0) return null;
     return { rows: des.rows, cols: des.cols, data: new Uint8Array(des.data) };
-    // Note: for JSON export we convert to base64.
   }
   _u8ToB64(u8) {
     let binary = ''; const chunk = 0x8000;
