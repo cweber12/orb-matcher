@@ -11,45 +11,39 @@ import { loadImg, matFromImageEl, cropImage } from './image_utils.js?v=20251104'
 // Helper to get element by ID
 const el = (id) => document.getElementById(id);
 
-// Main elements
-
-// Image A elements
-const fileA = el('fileA');                      // File input for Image A
-const imgA  = el('imgA');                       // Image A element
-const canvasA = el('canvasA');                  // Canvas for Image A display
-
-// JSON file element
-const fileJSON = el('fileJSON');
-
-// Image B elements
-const fileB = el('fileB');                      // File input for Image B
-const imgB  = el('imgB');                       // Image B element
+// File elements
+const fileA = el('fileA');          // File input for Image A
+const imgA  = el('imgA');           // Image A element
+const canvasA = el('canvasA');      // Canvas for Image A display
+const fileJSON = el('fileJSON');    // File input for features.json
+const fileB = el('fileB');          // File input for Image B
+const imgB  = el('imgB');           // Image B element
 
 // Canvas for displaying matches
 const canvasMatches = el('canvasMatches'); 
 
 // Action buttons
-const btnDetect = el('btnDetect');              // Detect features button
-const btnDownload = el('btnDownload');          // Download features.json button
-const btnMatch = el('btnMatch');                // Match features button
+const btnDetect = el('btnDetect');      // Detect features button
+const btnDownload = el('btnDownload');  // Download features.json button
+const btnMatch = el('btnMatch');        // Match features button
 
 // ORB detection stats elements
 const statsA = el('statsA');  
 const statsB = el('statsB');
 
 // ORB parameters elements
-const nfeatures = el('nfeatures');              // Number of features to detect
-const ratio = el('ratio');                      // Ratio for feature matching
-const ransac = el('ransac');                    // RANSAC threshold
-const edgeThreshold = el('edgeThreshold');      // Edge threshold for ORB
-const scaleFactor = el('scaleFactor');          // Scale factor for ORB
-const nlevels = el('nlevels');                  // Number of levels in the pyramid
-const fastThreshold = el('fastThreshold');      // FAST threshold for ORB
-const patchSize = el('patchSize');              // Patch size for ORB
-const matchParams = el('matchParams');          // Match parameters container
+const nfeatures = el('nfeatures');          // Number of features to detect
+const ratio = el('ratio');                  // Ratio for feature matching
+const ransac = el('ransac');                // RANSAC threshold
+const edgeThreshold = el('edgeThreshold');  // Edge threshold for ORB
+const scaleFactor = el('scaleFactor');      // Scale factor for ORB
+const nlevels = el('nlevels');              // Number of levels in the pyramid
+const fastThreshold = el('fastThreshold');  // FAST threshold for ORB
+const patchSize = el('patchSize');          // Patch size for ORB
 
-// ORB detection section element
+// Section elements for showing/hiding sections
 const detectOrb = el('detectOrb');
+const matchParams = el('matchParams');          
 
 // Crop box for Image A
 const cropBox = document.getElementById('cropBox');
@@ -62,7 +56,6 @@ setupCropBox(imgB, cropBoxB);   // Initialize crop box for Image B
 // STATE 
 // ------------------------------------------------
 
-// ORB feature tool state
 let mod;                    // ORBModule instance
 let cvReady = false;        // OpenCV.js readiness flag 
 let imgAReady = false;      // Image A readiness flag
@@ -81,18 +74,42 @@ const haveFeatures = () => Boolean(loadedJSON || detectResult);
 //  - imgEl: HTMLImageElement
 //  - cropBoxEl: crop box HTML element
 function getCropRectGeneric(imgEl, cropBoxEl) {
-    const imgRect = imgEl.getBoundingClientRect();
-    const cropRect = cropBoxEl.getBoundingClientRect();
-    const scaleX = imgEl.naturalWidth / imgRect.width;
-    const scaleY = imgEl.naturalHeight / imgRect.height;
+    const imgRect = imgEl.getBoundingClientRect();       // get image rect
+    const cropRect = cropBoxEl.getBoundingClientRect();  // get crop box rect
+    const scaleX = imgEl.naturalWidth / imgRect.width;   // scale factor X
+    const scaleY = imgEl.naturalHeight / imgRect.height; // scale factor Y
     
+    // calculate crop rectangle in natural image coordinates
     const result = {
         x: Math.round((cropRect.left - imgRect.left) * scaleX),
         y: Math.round((cropRect.top - imgRect.top) * scaleY),
         width: Math.round(cropRect.width * scaleX),
         height: Math.round(cropRect.height * scaleY)
     };
+
+    /*
+    VISUAL REPRESENTATION OF IMG AND CROP BOX COORDINATES
+
+    (imgRect.left, imgRect.top)
+    |
+    V    (cropRect.left, cropRect.top)
+    -----|----------------------------- 
+    |    |     IMAGE ELEMENT          | 
+    |    |                            | 
+    |    |                            |
+    |    |                            |
+    |    V                            |
+    |    ----------------------       | 
+    |    |                    |       |
+    |    |     CROP BOX       |       |
+    |    |                    |       |
+    |    |                    |       |
+    |    ---------------------- <-----|---- (cropRect.width, cropRect.height)
+    |                                 |
+    ----------------------------------- <-- (imgRect.width, imgRect.height)     
     
+    */
+
     // DEBUG
     console.log('getCropRectGeneric:', {
         imgRect, cropRect, scaleX, scaleY, result
@@ -120,28 +137,27 @@ function imshowCompat(canvas, mat) {
     // If the Mat is in 3-channel RGB format (CV_8UC3)
     //   - convert to 4-channel RGBA
     if (mat.type() === window.cv.CV_8UC3) {
-        rgba = new window.cv.Mat();     // Temporary Mat for conversion
-        window.cv.cvtColor(             // Convert to RGBA
-            mat,                        //   - source Mat
-            rgba,                       //   - destination Mat
-            window.cv.COLOR_RGB2RGBA    //   - color conversion code
+        rgba = new window.cv.Mat();   // Temporary Mat for conversion
+        window.cv.cvtColor(           // Convert to RGBA
+            mat,                      //   - source Mat
+            rgba,                     //   - destination Mat
+            window.cv.COLOR_RGB2RGBA  //   - color conversion code
         );
 
     // If the Mat is not already in 4-channel RGBA format (CV_8UC4)
     //   - convert to RGBA
     } else if (mat.type() !== window.cv.CV_8UC4) {
-        const tmp = new window.cv.Mat();    // Temporary Mat for conversion
-        window.cv.cvtColor(                 // Convert to RGBA
-            mat,                            //   - source Mat               
-            tmp,                            //   - destination Mat
-            window.cv.COLOR_RGBA2RGBA       //   - color conversion code
+        const tmp = new window.cv.Mat(); // Temporary Mat for conversion
+        window.cv.cvtColor(              // Convert to RGBA
+            mat,                         //   - source Mat               
+            tmp,                         //   - destination Mat
+            window.cv.COLOR_RGBA2RGBA    //   - color conversion code
         ); 
-        rgba = tmp;                         // Use converted Mat    
+        rgba = tmp; // Use converted Mat    
                                      
     // If the Mat is already in RGBA format
-    //   - Clone to avoid modifying original
     } else {
-        rgba = mat.clone(); 
+        rgba = mat.clone(); // clone to avoid modifying original 
     }
 
     // Create ImageData from the RGBA Mat data
@@ -172,26 +188,6 @@ function refreshButtons() {
     btnDetect.disabled = !(cvReady && imgAReady); 
     btnDownload.disabled = !(detectResult && detectResult.descriptors); 
     btnMatch.disabled = !(cvReady && imgBReady && haveFeatures()); 
-}
-
-// Get crop rectangle relative to image A
-function getCropRect() {
-    
-    // Get bounding rectangles for image A and the crop box
-    const imgRect = imgA.getBoundingClientRect(); 
-    const cropRect = cropBox.getBoundingClientRect(); 
-
-    // Calculate scale factors (natural image size vs rendered size)
-    const scaleX = imgA.naturalWidth / imgRect.width;
-    const scaleY = imgA.naturalHeight / imgRect.height;
-
-    // Return crop rectangle in natural image coordinates
-    return { 
-        x: Math.round((cropRect.left - imgRect.left) * scaleX), // x coordinate (left)
-        y: Math.round((cropRect.top - imgRect.top) * scaleY),   // y coordinate (top)
-        width: Math.round(cropRect.width * scaleX),             // width
-        height: Math.round(cropRect.height * scaleY)            // height
-    };
 }
 
 // Initialize ORBModule when OpenCV.js is ready
@@ -348,13 +344,6 @@ btnDetect.addEventListener('click', () => {
         x: kp.x + cropRect.x,
         y: kp.y + cropRect.y,
         }))
-
-        /* Offset keypoints to match their position on the full image
-        const offsetKeypoints = detectResult.keypoints.map(kp => ({
-            ...kp,
-            x: kp.x + cropRect.x,
-            y: kp.y + cropRect.y
-        }));*/
 
         // Start from the module's standard JSON (descriptors + normalized to CROPPED size)
         const baseJson = mod.exportJSON(detectResult);
