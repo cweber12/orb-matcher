@@ -259,19 +259,35 @@ fileA.addEventListener('change', async () => {
 // Image B load
 fileB.addEventListener('change', async () => {
     const f = fileB.files?.[0];
-    if (!f) return;
+    if (!f) return;  
     try {
-    await loadImg(f, imgB, cropBoxB);
-    imgBReady = true;
-    imgB.hidden = false;
-    cropBoxB.hidden = false;
-    statsB.textContent = '';
-    canvasMatches.hidden = true;
-    matchParams.hidden = false;
+        await loadImg(f, imgB, cropBoxB);
+        
+        imgB.hidden = false;
+        cropBoxB.hidden = false;
+        matchParams.hidden = false;
+
+        // Get the rendered size of the image
+        const imgRect = imgB.getBoundingClientRect();
+        const parent = imgB.parentElement;
+        parent.style.width = imgRect.width + 'px';
+        parent.style.height = imgRect.height + 'px';
+
+        // Initialize crop box to cover the whole image
+        cropBoxB.style.display = 'block';
+        cropBoxB.style.left = '0px';
+        cropBoxB.style.top = '0px';
+        cropBoxB.style.width = imgRect.width + 'px';
+        cropBoxB.style.height = imgRect.height + 'px';
+        
+        imgBReady = true;
+        statsB.textContent = '';
+        canvasMatches.hidden = true;
+    
     } catch (e) {
-    console.error('Image B preview error', e);
-    imgBReady = false;
-    imgB.hidden = true;
+        console.error('Image B preview error', e);
+        imgBReady = false;
+        imgB.hidden = true;
     }
     refreshButtons();
 });
@@ -422,7 +438,8 @@ btnMatch.addEventListener('click', () => {
     mod.drawMatches(A, B, keypointsA, offsetKeypointsB, res, source.imageSize);
     imshowCompat(canvasMatches, mod._lastCanvasMat);
 
-    fileB.hidden = true;
+    imgB.hidden = true;
+    cropBoxB.style.display = 'none';
     canvasMatches.hidden = false;
     A.delete();
     B.delete();

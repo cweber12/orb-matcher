@@ -16,20 +16,16 @@
   <div class="main">
     <!-- Upload image A, detect ORB features and export features.json -->
     <div class="card">
+      <h1>Upload Image A</h1>
       <div class="row">
-        <div class="column"> 
-          <h2>Upload Image A</h2>
-          <div class="row">
-            <input id="fileA" type="file" accept="image/*" />
-          </div>
-        </div>
+        <input id="fileA" type="file" accept="image/*" />
         <button id="btnDetect" disabled>Detect ORB</button>
         <button id="btnDownload" disabled>Download features.json</button>
       </div>
       <!-- ORB parameters and action buttons -->
-      <div id="detectOrb">
+      <div id="detectOrb" hidden>
         <h2>Extract and Export ORB Features</h2>
-        <div class="row" style="width:100%; align-items:center; gap:24px; justify-content:space-between;">
+        <div class="row" style="width:100%; align-items:flex-start; gap:24px; justify-content: space-between;">
           <div class="column muted params">
             <div class="row param">
               nfeatures <input id="nfeatures" type="number" value="1200" min="100" max="5000">
@@ -67,17 +63,17 @@
 
     <!-- Import JSON + match to Image B -->
     <div class="card">
-      <div class="column">
-        <h2>Match ORB Features to Image B</h2>
-        <div class="row">
-          <input id="fileJSON" type="file" accept=".json,application/json" />
-          <input id="fileB" type="file" accept="image/*" />
-          <button id="btnMatch" disabled>Match</button>
-        </div>  
-      </div>
-      <div class="row" style="width:100%; align-items:center; gap:24px; justify-content:space-between;">
-        <div id="matchParams" style="width: 30%;" hidden>
-          <div  class="column muted params">
+      <h1>Upload Saved Features and Image B</h1>
+      <div class="row">
+        <input id="fileJSON" type="file" accept=".json,application/json" />
+        <input id="fileB" type="file" accept="image/*" />
+        <button id="btnMatch" disabled>Match</button>
+      </div>  
+      
+      <div id="matchParams" hidden>
+        <h2>Match Saved ORB Features to Image B</h2>
+        <div class="row" style="width:100%; align-items:flex-start; gap:24px; justify-content: space-between;">
+          <div class="column muted params">
             <div class="row param">
               ratio <input id="ratio" type="number" step="0.01" value="0.75">
             </div>
@@ -85,22 +81,20 @@
               RANSACthresh <input id="ransac" type="number" step="0.1" value="3.0">       
             </div>
           </div>
-        </div>
-        <div style="position:relative; display:inline-block;">
-          <img id="imgB" alt="Image B preview" hidden/>
-          <canvas id="canvasMatches" style="width:100%" hidden></canvas>
-          <div id="statsB" class="mono muted"></div>
-          <div id="cropBoxB" class="crop-box" style="position:absolute;" hidden>
-            <div class="resize-handle" data-corner="nw"></div>
-            <div class="resize-handle" data-corner="ne"></div>
-            <div class="resize-handle" data-corner="sw"></div>
-            <div class="resize-handle" data-corner="se"></div>
-          </div>
-          
-        </div>
         
-        
-      </div>
+          <div style="position:relative; display:inline-block; max-width: 65%;">
+            <img id="imgB" alt="Image B preview" hidden/>
+            <div id="cropBoxB" class="crop-box" style="position:absolute;" hidden>
+              <div class="resize-handle" data-corner="nw"></div>
+              <div class="resize-handle" data-corner="ne"></div>
+              <div class="resize-handle" data-corner="sw"></div>
+              <div class="resize-handle" data-corner="se"></div>
+            </div> 
+            <canvas id="canvasMatches" style="width:100%" hidden></canvas>
+            <div id="statsB" class="mono muted"></div> 
+          </div>  
+        </div>  
+      </div>  
     </div> 
   </div>
 
